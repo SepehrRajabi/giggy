@@ -1,106 +1,107 @@
-meta: Meta,
-fields: []Field,
+pub const MultiField = struct {
+    meta: Meta,
+    fields: []Field,
 
-const Self = @This();
-const Field = @import("field.zig");
+    const Self = @This();
 
-pub const Meta = struct {
-    cid: u32,
-    fields: []const Field.Meta,
+    pub const Meta = struct {
+        cid: u32,
+        fields: []const Field.Meta,
 
-    pub inline fn from(comptime T: type) Meta {
+        pub inline fn from(comptime T: type) Meta {
+            const ti = @typeInfo(T);
+            assert(ti == .@"struct");
+            assert(@hasDecl(T, "cid"));
+            const cid = T.cid;
+            const l = ti.@"struct".fields.len;
+            var fs: [l]Field.Meta = undefined;
+            inline for (0..l) |idx| {
+                fs[idx] = .fromStruct(T, idx);
+            }
+            return .{ .cid = cid, .fields = &fs };
+        }
+
+        pub fn clone(self: *const Meta, gpa: mem.Allocator) !Meta {
+            var fs = try gpa.alloc(Field.Meta, self.fields.len);
+            for (self.fields, 0..) |f, i|
+                fs[i] = f;
+            return .{ .cid = self.cid, .fields = fs };
+        }
+
+        pub fn deinit(self: *const Meta, gpa: mem.Allocator) void {
+            gpa.free(self.fields);
+        }
+    };
+
+    pub fn init(gpa: mem.Allocator, meta: Meta) !Self {
+        var fs = try gpa.alloc(Field, meta.fields.len);
+        errdefer gpa.free(fs);
+        for (meta.fields, 0..) |field_meta, i| {
+            fs[i] = Field.init(gpa, field_meta) catch |err| {
+                for (0..i) |j|
+                    fs[j].deinit(gpa);
+                return err;
+            };
+        }
+        return .{
+            .meta = try meta.clone(gpa),
+            .fields = fs,
+        };
+    }
+
+    pub fn deinit(self: *const Self, gpa: mem.Allocator) void {
+        for (self.fields) |*f|
+            f.deinit(gpa);
+        gpa.free(self.fields);
+        self.meta.deinit(gpa);
+    }
+
+    pub fn append(self: *Self, gpa: mem.Allocator, value: anytype) !void {
+        const T = @TypeOf(value);
         const ti = @typeInfo(T);
+
         assert(ti == .@"struct");
         assert(@hasDecl(T, "cid"));
-        const cid = T.cid;
-        const l = ti.@"struct".fields.len;
-        var fs: [l]Field.Meta = undefined;
-        inline for (0..l) |idx| {
-            fs[idx] = .fromStruct(T, idx);
+        assert(T.cid == self.meta.cid);
+        const field_count = ti.@"struct".fields.len;
+        assert(field_count == self.fields.len);
+
+        var extracted: [field_count][]const u8 = undefined;
+        inline for (ti.@"struct".fields, 0..) |f, i| {
+            const field_ptr = &@field(value, f.name);
+            extracted[i] = std.mem.asBytes(field_ptr);
         }
-        return .{ .cid = cid, .fields = &fs };
+
+        try self.appendRaw(gpa, extracted[0..]);
     }
 
-    pub fn clone(self: *const Meta, gpa: mem.Allocator) !Meta {
-        var fs = try gpa.alloc(Field.Meta, self.fields.len);
-        for (self.fields, 0..) |f, i|
-            fs[i] = f;
-        return .{ .cid = self.cid, .fields = fs };
+    pub fn appendRaw(self: *Self, gpa: mem.Allocator, data: []const []const u8) !void {
+        assert(data.len == self.fields.len);
+        for (self.fields, data, 0..) |*f, d, i| {
+            f.appendRaw(gpa, d) catch |err| {
+                for (0..i) |j|
+                    self.fields[j].pop();
+                return err;
+            };
+        }
     }
 
-    pub fn deinit(self: *const Meta, gpa: mem.Allocator) void {
-        gpa.free(self.fields);
+    pub fn remove(self: *Self, index: usize) void {
+        assert(index < self.len());
+        for (self.fields) |*f| f.remove(index);
+    }
+
+    pub fn pop(self: *Self) void {
+        self.remove(self.len() - 1);
+    }
+
+    pub fn len(self: *const Self) usize {
+        const l = self.fields[0].len();
+        for (self.fields[1..]) |f|
+            assert(f.len() == l);
+        return l;
     }
 };
-
-pub fn init(gpa: mem.Allocator, meta: Meta) !Self {
-    var fs = try gpa.alloc(Field, meta.fields.len);
-    errdefer gpa.free(fs);
-    for (meta.fields, 0..) |field_meta, i| {
-        fs[i] = Field.init(gpa, field_meta) catch |err| {
-            for (0..i) |j|
-                fs[j].deinit(gpa);
-            return err;
-        };
-    }
-    return .{
-        .meta = try meta.clone(gpa),
-        .fields = fs,
-    };
-}
-
-pub fn deinit(self: *const Self, gpa: mem.Allocator) void {
-    for (self.fields) |*f|
-        f.deinit(gpa);
-    gpa.free(self.fields);
-    self.meta.deinit(gpa);
-}
-
-pub fn append(self: *Self, gpa: mem.Allocator, value: anytype) !void {
-    const T = @TypeOf(value);
-    const ti = @typeInfo(T);
-
-    assert(ti == .@"struct");
-    assert(@hasDecl(T, "cid"));
-    assert(T.cid == self.meta.cid);
-    const field_count = ti.@"struct".fields.len;
-    assert(field_count == self.fields.len);
-
-    var extracted: [field_count][]const u8 = undefined;
-    inline for (ti.@"struct".fields, 0..) |f, i| {
-        const field_ptr = &@field(value, f.name);
-        extracted[i] = std.mem.asBytes(field_ptr);
-    }
-
-    try self.appendRaw(gpa, extracted[0..]);
-}
-
-pub fn appendRaw(self: *Self, gpa: mem.Allocator, data: []const []const u8) !void {
-    assert(data.len == self.fields.len);
-    for (self.fields, data, 0..) |*f, d, i| {
-        f.appendRaw(gpa, d) catch |err| {
-            for (0..i) |j|
-                self.fields[j].pop();
-            return err;
-        };
-    }
-}
-
-pub fn remove(self: *Self, index: usize) void {
-    assert(index < self.len());
-    for (self.fields) |*f| f.remove(index);
-}
-
-pub fn pop(self: *Self) void {
-    self.remove(self.len() - 1);
-}
-
-pub fn len(self: *const Self) usize {
-    const l = self.fields[0].len();
-    for (self.fields[1..]) |f|
-        assert(f.len() == l);
-    return l;
-}
 
 test "MultiField.Meta.from" {
     const C1 = struct {
@@ -109,14 +110,14 @@ test "MultiField.Meta.from" {
         y: u32,
     };
     try testing.expectEqualDeep(
-        Meta{
+        MultiField.Meta{
             .cid = 1,
             .fields = ([_]Field.Meta{
                 Field.Meta{ .index = 0, .name = "x", .size = 4, .alignment = 4 },
                 Field.Meta{ .index = 1, .name = "y", .size = 4, .alignment = 4 },
             })[0..],
         },
-        Meta.from(C1),
+        MultiField.Meta.from(C1),
     );
     const C2 = struct {
         const cid = 2;
@@ -125,7 +126,7 @@ test "MultiField.Meta.from" {
         c: u16,
     };
     try testing.expectEqualDeep(
-        Meta{
+        MultiField.Meta{
             .cid = 2,
             .fields = ([_]Field.Meta{
                 Field.Meta{ .index = 0, .name = "a", .size = 1, .alignment = 1 },
@@ -133,7 +134,7 @@ test "MultiField.Meta.from" {
                 Field.Meta{ .index = 2, .name = "c", .size = 2, .alignment = 2 },
             })[0..],
         },
-        Meta.from(C2),
+        MultiField.Meta.from(C2),
     );
 }
 
@@ -144,7 +145,7 @@ test "MultiField.Meta.clone" {
         x: u32,
         y: u32,
     };
-    const meta = Meta.from(C);
+    const meta = MultiField.Meta.from(C);
     const meta_clone = try meta.clone(alloc);
     defer meta_clone.deinit(alloc);
     try testing.expectEqualDeep(meta, meta_clone);
@@ -157,7 +158,7 @@ test "MultiField.appendRaw" {
         x: u32,
         y: u32,
     };
-    var multi = try init(alloc, .from(C));
+    var multi = try MultiField.init(alloc, .from(C));
     defer multi.deinit(alloc);
     const data = [_][]const u8{
         &mem.toBytes(@as(u32, 0xDEADBEEF)),
@@ -182,7 +183,7 @@ test "MultiField.append" {
         x: u32,
         y: u32,
     };
-    var multi = try init(alloc, .from(C));
+    var multi = try MultiField.init(alloc, .from(C));
     defer multi.deinit(alloc);
     const value = C{
         .x = 0xDEADBEEF,
@@ -204,3 +205,5 @@ const std = @import("std");
 const mem = std.mem;
 const testing = std.testing;
 const assert = std.debug.assert;
+
+const Field = @import("field.zig").Field;

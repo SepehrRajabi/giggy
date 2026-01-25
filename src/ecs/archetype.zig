@@ -1,167 +1,168 @@
-meta: Meta,
-components: []MultiField,
+pub const Archetype = struct {
+    meta: Meta,
+    components: []MultiField,
 
-const Self = @This();
-const Field = @import("field.zig");
-const MultiField = @import("multi_field.zig");
+    const Self = @This();
 
-pub const Meta = struct {
-    components: []const MultiField.Meta,
+    pub const Meta = struct {
+        components: []const MultiField.Meta,
 
-    pub inline fn from(comptime Ts: []const type) Meta {
-        var metas: [Ts.len]MultiField.Meta = undefined;
-        inline for (Ts, 0..) |T, i| {
-            metas[i] = MultiField.Meta.from(T);
-        }
-        std.sort.insertion(MultiField.Meta, &metas, {}, struct {
-            fn lessThan(_: void, a: MultiField.Meta, b: MultiField.Meta) bool {
-                return a.cid < b.cid;
+        pub inline fn from(comptime Ts: []const type) Meta {
+            var metas: [Ts.len]MultiField.Meta = undefined;
+            inline for (Ts, 0..) |T, i| {
+                metas[i] = MultiField.Meta.from(T);
             }
-        }.lessThan);
-        inline for (1..metas.len) |i| {
-            assert(metas[i - 1].cid != metas[i].cid);
+            std.sort.insertion(MultiField.Meta, &metas, {}, struct {
+                fn lessThan(_: void, a: MultiField.Meta, b: MultiField.Meta) bool {
+                    return a.cid < b.cid;
+                }
+            }.lessThan);
+            inline for (1..metas.len) |i| {
+                assert(metas[i - 1].cid != metas[i].cid);
+            }
+            return .{ .components = &metas };
         }
-        return .{ .components = &metas };
+
+        pub fn clone(self: *const Meta, gpa: mem.Allocator) !Meta {
+            var comps = try gpa.alloc(MultiField.Meta, self.components.len);
+            for (comps, 0..) |_, i| {
+                comps[i] = self.components[i].clone(gpa) catch |err| {
+                    for (0..i) |j|
+                        comps[j].deinit(gpa);
+                    return err;
+                };
+            }
+            return .{ .components = comps };
+        }
+
+        pub fn deinit(self: *const Meta, gpa: mem.Allocator) void {
+            for (self.components) |comp|
+                comp.deinit(gpa);
+            gpa.free(self.components);
+        }
+    };
+
+    pub const Iterator = struct {
+        archetype: *Self,
+        index: usize,
+
+        pub fn next(self: *Iterator) bool {
+            if (self.index + 1 >= self.archetype.len()) return false;
+            self.index += 1;
+            return true;
+        }
+
+        pub fn get(self: *const Iterator, comptime T: type) StructFieldPointer(T) {
+            const ti = @typeInfo(T);
+            assert(ti == .@"struct");
+            assert(@hasDecl(T, "cid"));
+            const comp = self.archetype.components[self.archetype.indexOfCID(T.cid) orelse unreachable];
+
+            var out: StructFieldPointer(T) = undefined;
+            inline for (ti.@"struct".fields, 0..) |f, i| {
+                @field(out, f.name) = comp.fields[i].at(f.type, self.index);
+            }
+
+            return out;
+        }
+    };
+
+    pub fn iter(self: *Self) Iterator {
+        return .{
+            .archetype = self,
+            .index = 0,
+        };
     }
 
-    pub fn clone(self: *const Meta, gpa: mem.Allocator) !Meta {
-        var comps = try gpa.alloc(MultiField.Meta, self.components.len);
-        for (comps, 0..) |_, i| {
-            comps[i] = self.components[i].clone(gpa) catch |err| {
+    pub fn init(gpa: mem.Allocator, meta: Meta) !Self {
+        var comps = try gpa.alloc(MultiField, meta.components.len);
+        errdefer gpa.free(comps);
+
+        for (meta.components, 0..) |cm, i| {
+            comps[i] = MultiField.init(gpa, cm) catch |err| {
                 for (0..i) |j|
                     comps[j].deinit(gpa);
                 return err;
             };
         }
-        return .{ .components = comps };
+
+        return .{
+            .meta = try meta.clone(gpa),
+            .components = comps,
+        };
     }
 
-    pub fn deinit(self: *const Meta, gpa: mem.Allocator) void {
+    pub fn deinit(self: *Self, gpa: mem.Allocator) void {
         for (self.components) |comp|
             comp.deinit(gpa);
         gpa.free(self.components);
-    }
-};
-
-pub const Iterator = struct {
-    archetype: *Self,
-    index: usize,
-
-    pub fn next(self: *Iterator) bool {
-        if (self.index + 1 >= self.archetype.len()) return false;
-        self.index += 1;
-        return true;
+        self.meta.deinit(gpa);
     }
 
-    pub fn get(self: *const Iterator, comptime T: type) StructFieldPointer(T) {
-        const ti = @typeInfo(T);
+    pub fn append(self: *Self, gpa: mem.Allocator, component_list: anytype) !void {
+        const ti = @typeInfo(@TypeOf(component_list));
         assert(ti == .@"struct");
-        assert(@hasDecl(T, "cid"));
-        const comp = self.archetype.components[self.archetype.indexOfCID(T.cid) orelse unreachable];
 
-        var out: StructFieldPointer(T) = undefined;
-        inline for (ti.@"struct".fields, 0..) |f, i| {
-            @field(out, f.name) = comp.fields[i].at(f.type, self.index);
+        const fields = ti.@"struct".fields;
+        assert(fields.len == self.components.len);
+
+        var cid_indexes: [fields.len]usize = undefined;
+        inline for (fields, 0..) |f, i| {
+            const T = f.type;
+            assert(@hasDecl(T, "cid"));
+            cid_indexes[i] = self.indexOfCID(T.cid) orelse unreachable;
         }
 
-        return out;
+        // check for duplication
+        for (fields, 0..) |_, i| {
+            for (0..i) |j| if (cid_indexes[i] == cid_indexes[j]) unreachable;
+        }
+
+        inline for (fields, cid_indexes, 0..) |f, cid_idx, i| {
+            const value = @field(component_list, f.name);
+            self.components[cid_idx].append(gpa, value) catch |err| {
+                for (0..i) |j|
+                    self.components[cid_indexes[j]].pop();
+                return err;
+            };
+        }
+    }
+
+    pub fn appendRaw(self: *Self, gpa: mem.Allocator, data: []const []const []const u8) !void {
+        assert(data.len == self.components.len);
+        for (self.components, data, 0..) |*c, d, i| {
+            c.appendRaw(gpa, d) catch |err| {
+                for (0..i) |j|
+                    self.components[j].pop();
+                return err;
+            };
+        }
+    }
+
+    pub fn remove(self: *Self, index: usize) void {
+        assert(index < self.len());
+        for (self.components) |comp|
+            comp.remove(index);
+    }
+
+    pub fn pop(self: *Self) void {
+        self.remove(self.len() - 1);
+    }
+
+    pub fn len(self: *const Self) usize {
+        if (self.components.len == 0) return 0;
+        const l = self.components[0].len();
+        for (self.components[1..]) |comp|
+            assert(l == comp.len());
+        return l;
+    }
+
+    pub fn indexOfCID(self: *const Self, cid: u32) ?usize {
+        return for (self.meta.components, 0..) |comp, idx| {
+            if (comp.cid == cid) break idx;
+        } else null;
     }
 };
-
-pub fn iter(self: *Self) Iterator {
-    return .{
-        .archetype = self,
-        .index = 0,
-    };
-}
-
-pub fn init(gpa: mem.Allocator, meta: Meta) !Self {
-    var comps = try gpa.alloc(MultiField, meta.components.len);
-    errdefer gpa.free(comps);
-
-    for (meta.components, 0..) |cm, i| {
-        comps[i] = MultiField.init(gpa, cm) catch |err| {
-            for (0..i) |j|
-                comps[j].deinit(gpa);
-            return err;
-        };
-    }
-
-    return .{
-        .meta = try meta.clone(gpa),
-        .components = comps,
-    };
-}
-
-pub fn deinit(self: *Self, gpa: mem.Allocator) void {
-    for (self.components) |comp|
-        comp.deinit(gpa);
-    gpa.free(self.components);
-    self.meta.deinit(gpa);
-}
-
-pub fn append(self: *Self, gpa: mem.Allocator, component_list: anytype) !void {
-    const ti = @typeInfo(@TypeOf(component_list));
-    assert(ti == .@"struct");
-
-    const fields = ti.@"struct".fields;
-    assert(fields.len == self.components.len);
-
-    var cid_indexes: [fields.len]usize = undefined;
-    inline for (fields, 0..) |f, i| {
-        const T = f.type;
-        assert(@hasDecl(T, "cid"));
-        cid_indexes[i] = self.indexOfCID(T.cid) orelse unreachable;
-    }
-
-    // check for duplication
-    for (fields, 0..) |_, i| {
-        for (0..i) |j| if (cid_indexes[i] == cid_indexes[j]) unreachable;
-    }
-
-    inline for (fields, cid_indexes, 0..) |f, cid_idx, i| {
-        const value = @field(component_list, f.name);
-        self.components[cid_idx].append(gpa, value) catch |err| {
-            for (0..i) |j|
-                self.components[cid_indexes[j]].pop();
-            return err;
-        };
-    }
-}
-
-pub fn appendRaw(self: *Self, gpa: mem.Allocator, data: []const []const []const u8) !void {
-    assert(data.len == self.components.len);
-    for (self.components, data, 0..) |*c, d, i| {
-        c.appendRaw(gpa, d) catch |err| {
-            for (0..i) |j|
-                self.components[j].pop();
-            return err;
-        };
-    }
-}
-
-pub fn remove(self: *Self, index: usize) void {
-    assert(index < self.len());
-    for (self.components) |comp|
-        comp.remove(index);
-}
-
-pub fn pop(self: *Self) void {
-    self.remove(self.len() - 1);
-}
-
-pub fn len(self: *const Self) usize {
-    const l = self.components[0].len();
-    for (self.components[1..]) |comp|
-        assert(l == comp.len());
-    return l;
-}
-
-pub fn indexOfCID(self: *const Self, cid: u32) ?usize {
-    return for (self.meta.components, 0..) |comp, idx| {
-        if (comp.cid == cid) break idx;
-    } else null;
-}
 
 pub fn StructFieldPointer(comptime T: type) type {
     const ti = @typeInfo(T);
@@ -222,7 +223,7 @@ test "Archetype.Meta.from" {
         b: u32,
         c: u16,
     };
-    const expected = Meta{ .components = ([_]MultiField.Meta{
+    const expected = Archetype.Meta{ .components = ([_]MultiField.Meta{
         MultiField.Meta{
             .cid = 1,
             .fields = ([_]Field.Meta{
@@ -239,7 +240,7 @@ test "Archetype.Meta.from" {
             })[0..],
         },
     })[0..] };
-    try testing.expectEqualDeep(expected, Meta.from(&[_]type{ C1, C2 }));
+    try testing.expectEqualDeep(expected, Archetype.Meta.from(&[_]type{ C1, C2 }));
 }
 
 test "Archetype.Meta.clone" {
@@ -255,13 +256,13 @@ test "Archetype.Meta.clone" {
         b: u32,
         c: u16,
     };
-    const meta = Meta.from(&[_]type{ C1, C2 });
+    const meta = Archetype.Meta.from(&[_]type{ C1, C2 });
     const meta_clone = try meta.clone(alloc);
     defer meta_clone.deinit(alloc);
     try testing.expectEqualDeep(meta, meta_clone);
 }
 
-test Iterator {
+test "Archetype.Iterator" {
     const alloc = testing.allocator;
     const Position = struct {
         pub const cid = 1;
@@ -273,7 +274,7 @@ test Iterator {
         x: u32,
         y: u32,
     };
-    var archetype = try init(alloc, .from(&[_]type{ Position, Velocity }));
+    var archetype = try Archetype.init(alloc, .from(&[_]type{ Position, Velocity }));
     defer archetype.deinit(alloc);
 
     try archetype.append(alloc, .{ Position{ .x = 0, .y = 0 }, Velocity{ .x = 1, .y = 1 } });
@@ -305,3 +306,6 @@ const std = @import("std");
 const mem = std.mem;
 const testing = std.testing;
 const assert = std.debug.assert;
+
+const Field = @import("field.zig").Field;
+const MultiField = @import("multi_field.zig").MultiField;
