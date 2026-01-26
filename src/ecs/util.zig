@@ -89,8 +89,8 @@ test isTuple {
     }));
 }
 
-pub fn ViewOf(comptime T: type) type {
-    const ti = @typeInfo(T);
+pub fn ViewOf(comptime C: type) type {
+    const ti = @typeInfo(C);
     assert(ti == .@"struct");
 
     const fields = ti.@"struct".fields;

@@ -194,7 +194,7 @@ pub const Archetype = struct {
         assert(index < self.len());
         const entity = self.entities.swapRemove(index);
         _ = self.entities_index.remove(entity);
-        for (self.components) |comp|
+        for (self.components) |*comp|
             comp.remove(index);
         return entity;
     }

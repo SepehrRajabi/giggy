@@ -42,12 +42,55 @@ pub const World = struct {
         return e;
     }
 
+    pub fn despawn(self: *Self, entity: Entity) bool {
+        const hash = self.entity_archetype.get(entity) orelse return false;
+        const arch_entry = self.archetypes.getEntry(hash).?;
+        const idx = arch_entry.value_ptr.indexOf(entity).?;
+        const entity_removed = arch_entry.value_ptr.remove(idx);
+        assert(entity == entity_removed);
+        const entity_arch_index_removed = self.entity_archetype.swapRemove(entity);
+        assert(entity_arch_index_removed);
+        _ = self.removeArchetypeIfEmpty(arch_entry);
+        return true;
+    }
+
+    pub fn archetypeOf(self: *Self, entity: Entity) ?*Archetype {
+        const hash = self.entity_archetype.get(entity) orelse return null;
+        return self.archetypes.getPtr(hash);
+    }
+
+    pub fn get(self: *Self, View: type, entity: Entity) ?View {
+        const arch = self.archetypeOf(entity) orelse return null;
+        const index = arch.indexOf(entity).?;
+        return arch.at(View, index);
+    }
+
+    pub fn getAuto(self: *Self, C: type, entity: Entity) ?util.ViewOf(C) {
+        const arch = self.archetypeOf(entity) orelse return null;
+        const index = arch.indexOf(entity).?;
+        return arch.atAuto(C, index);
+    }
+
+    pub fn count(self: *const Self) usize {
+        return self.entity_archetype.count();
+    }
+
+    pub fn countArchetype(self: *const Self) usize {
+        return self.archetypes.count();
+    }
+
     fn getOrCreateArchetype(self: *Self, meta: Archetype.Meta) !*Archetype {
         const hash = meta.hash();
         if (self.archetypes.getPtr(hash)) |arch_ptr| return arch_ptr;
         const arch = try Archetype.init(self.gpa, meta);
         try self.archetypes.put(hash, arch);
         return self.archetypes.getPtr(hash) orelse unreachable;
+    }
+
+    fn removeArchetypeIfEmpty(self: *Self, entry: ArchetypeHashMap.Entry) bool {
+        if (entry.value_ptr.len() > 0) return false;
+        entry.value_ptr.deinit(self.gpa);
+        return self.archetypes.remove(entry.key_ptr.*);
     }
 
     pub fn query(self: *Self, comptime Comps: []const type) QueryIterator {
@@ -132,36 +175,93 @@ pub const World = struct {
     };
 };
 
-test "World.spawn" {
+test "World.{spawn,despawn,get}" {
     const Position = struct {
         pub const cid = 1;
         x: u32,
         y: u32,
+    };
+    const PositionView = struct {
+        pub const Of = Position;
+        x: *u32,
+        y: *u32,
     };
     const Velocity = struct {
         pub const cid = 2;
         x: u32,
         y: u32,
     };
+    const VelocityView = struct {
+        pub const Of = Velocity;
+        x: *u32,
+        y: *u32,
+    };
 
     const alloc = testing.allocator;
     var world = try World.init(alloc);
     defer world.deinit();
 
-    _ = try world.spawn(.{
-        Position{ .x = 0, .y = 0 },
-        Velocity{ .x = 1, .y = 1 },
+    const e1 = try world.spawn(.{
+        Position{ .x = 50, .y = 60 },
+        Velocity{ .x = 500, .y = 600 },
     });
-    _ = try world.spawn(.{
-        Position{ .x = 0, .y = 0 },
-        Velocity{ .x = 1, .y = 1 },
+    const e2 = try world.spawn(.{
+        Position{ .x = 100, .y = 200 },
+        Velocity{ .x = 1000, .y = 2000 },
     });
 
-    var it = world.archetypes.valueIterator();
-    var arch = it.next() orelse unreachable;
-    try testing.expectEqual(2, arch.entities.items.len);
-    try testing.expectEqual(2, arch.len());
-    try testing.expectEqual(null, it.next());
+    try testing.expectEqual(2, world.count());
+    try testing.expectEqual(1, world.countArchetype());
+
+    {
+        const p = world.get(PositionView, e1).?;
+        try testing.expectEqual(50, p.x.*);
+        try testing.expectEqual(60, p.y.*);
+        const v = world.get(VelocityView, e1).?;
+        try testing.expectEqual(500, v.x.*);
+        try testing.expectEqual(600, v.y.*);
+    }
+    {
+        const p = world.get(PositionView, e2).?;
+        try testing.expectEqual(100, p.x.*);
+        try testing.expectEqual(200, p.y.*);
+        const v = world.get(VelocityView, e2).?;
+        try testing.expectEqual(1000, v.x.*);
+        try testing.expectEqual(2000, v.y.*);
+    }
+
+    try testing.expect(world.despawn(e2));
+    try testing.expectEqual(1, world.count());
+    try testing.expectEqual(1, world.countArchetype());
+    {
+        const p = world.get(PositionView, e2);
+        try testing.expectEqual(null, p);
+        const v = world.get(VelocityView, e2);
+        try testing.expectEqual(null, v);
+    }
+    {
+        const p = world.get(PositionView, e1).?;
+        try testing.expectEqual(50, p.x.*);
+        try testing.expectEqual(60, p.y.*);
+        const v = world.get(VelocityView, e1).?;
+        try testing.expectEqual(500, v.x.*);
+        try testing.expectEqual(600, v.y.*);
+    }
+    try testing.expect(world.despawn(e1));
+    try testing.expectEqual(0, world.count());
+    try testing.expectEqual(0, world.countArchetype());
+    {
+        const p = world.get(PositionView, e2);
+        try testing.expectEqual(null, p);
+        const v = world.get(VelocityView, e2);
+        try testing.expectEqual(null, v);
+    }
+    {
+        const p = world.get(PositionView, e1);
+        try testing.expectEqual(null, p);
+        const v = world.get(VelocityView, e1);
+        try testing.expectEqual(null, v);
+    }
 }
 
 test "World.QueryIterator" {
