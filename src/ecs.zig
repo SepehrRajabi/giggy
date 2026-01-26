@@ -6,5 +6,5 @@ pub const world = @import("./ecs/world.zig");
 pub const Field = field.Field;
 pub const MultiField = multi_field.MultiField;
 pub const Archetype = archetype.Archetype;
-pub const Entity = world.Entity;
+pub const Entity = archetype.Entity;
 pub const World = world.World;

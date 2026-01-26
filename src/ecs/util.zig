@@ -1,3 +1,23 @@
+pub fn isUnique(comptime T: type, items: []T) bool {
+    if (items.len <= 1) return true;
+    std.sort.block(T, items, {}, std.sort.asc(T));
+    for (1..items.len) |i| {
+        if (items[i - 1] == items[i]) return false;
+    }
+    return true;
+}
+
+test isUnique {
+    var array0 = [_]u8{};
+    try testing.expectEqual(true, isUnique(u8, &array0));
+    var array1 = [_]u8{1};
+    try testing.expectEqual(true, isUnique(u8, &array1));
+    var array2 = [_]u8{ 1, 2, 3 };
+    try testing.expectEqual(true, isUnique(u8, &array2));
+    var array3 = [_]u8{ 3, 2, 3 };
+    try testing.expectEqual(false, isUnique(u8, &array3));
+}
+
 pub fn typesOfTuple(tuple: anytype) []type {
     if (!isTuple(tuple))
         @compileError("input must be a tuple");

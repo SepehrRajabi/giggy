@@ -1,14 +1,23 @@
+pub const Entity = u32;
+
 pub const Archetype = struct {
     meta: Meta,
+    entities: EntityList,
     components: []MultiField,
     hash: u64,
 
     const Self = @This();
+    const EntityList = std.ArrayList(Entity);
 
     pub const Meta = struct {
         components: []const MultiField.Meta,
 
+        pub const empty = from(&[_]type{});
+
         pub inline fn from(comptime Ts: []const type) Meta {
+            if (Ts.len == 0)
+                return .{ .components = &[0]MultiField.Meta{} };
+
             var metas: [Ts.len]MultiField.Meta = undefined;
             inline for (Ts, 0..) |T, i| {
                 metas[i] = MultiField.Meta.from(T);
@@ -74,10 +83,11 @@ pub const Archetype = struct {
         archetype: *Self,
         next_index: usize,
 
-        pub fn next(self: *Iterator) bool {
-            if (self.next_index >= self.archetype.len()) return false;
+        pub fn next(self: *Iterator) ?Entity {
+            if (self.next_index >= self.archetype.len())
+                return null;
             self.next_index += 1;
-            return true;
+            return self.archetype.entities.items[self.next_index - 1];
         }
 
         pub fn get(self: *const Iterator, comptime View: type) View {
@@ -151,19 +161,23 @@ pub const Archetype = struct {
 
         return .{
             .meta = try meta.clone(gpa),
+            .entities = try EntityList.initCapacity(gpa, 1),
             .components = comps,
             .hash = meta.hash(),
         };
     }
 
     pub fn deinit(self: *Self, gpa: mem.Allocator) void {
-        for (self.components) |comp|
-            comp.deinit(gpa);
+        if (self.meta.components.len > 0) {
+            for (self.components) |comp|
+                comp.deinit(gpa);
+        }
         gpa.free(self.components);
+        self.entities.deinit(gpa);
         self.meta.deinit(gpa);
     }
 
-    pub fn append(self: *Self, gpa: mem.Allocator, component_list: anytype) !void {
+    pub fn append(self: *Self, gpa: mem.Allocator, entity: Entity, component_list: anytype) !void {
         const ti = @typeInfo(@TypeOf(component_list));
         assert(ti == .@"struct");
 
@@ -182,6 +196,8 @@ pub const Archetype = struct {
             for (0..i) |j| if (cid_indexes[i] == cid_indexes[j]) unreachable;
         }
 
+        try self.entities.append(gpa, entity);
+        errdefer _ = self.entities.pop();
         inline for (fields, cid_indexes, 0..) |f, cid_idx, i| {
             const value = @field(component_list, f.name);
             self.components[cid_idx].append(gpa, value) catch |err| {
@@ -192,8 +208,10 @@ pub const Archetype = struct {
         }
     }
 
-    pub fn appendRaw(self: *Self, gpa: mem.Allocator, data: []const []const []const u8) !void {
+    pub fn appendRaw(self: *Self, gpa: mem.Allocator, entity: Entity, data: []const []const []const u8) !void {
         assert(data.len == self.components.len);
+        try self.entities.append(gpa, entity);
+        errdefer _ = self.entities.pop();
         for (self.components, data, 0..) |*c, d, i| {
             c.appendRaw(gpa, d) catch |err| {
                 for (0..i) |j|
@@ -205,6 +223,7 @@ pub const Archetype = struct {
 
     pub fn remove(self: *Self, index: usize) void {
         assert(index < self.len());
+        self.entities.swapRemove(index);
         for (self.components) |comp|
             comp.remove(index);
     }
@@ -214,9 +233,8 @@ pub const Archetype = struct {
     }
 
     pub fn len(self: *const Self) usize {
-        if (self.components.len == 0) return 0;
-        const l = self.components[0].len();
-        for (self.components[1..]) |comp|
+        const l = self.entities.items.len;
+        for (self.components) |comp|
             assert(l == comp.len());
         return l;
     }
@@ -229,6 +247,10 @@ pub const Archetype = struct {
 };
 
 test "Archetype.Meta.from" {
+    const empty = Archetype.Meta.from(&[_]type{});
+    try testing.expectEqualDeep(empty, Archetype.Meta.empty);
+    try testing.expectEqual(0, empty.components.len);
+
     const C1 = struct {
         pub const cid = 1;
         x: u32,
@@ -272,6 +294,12 @@ test "Archetype.Meta.hasComponents" {
         b: u32,
         c: u16,
     };
+
+    const empty = Archetype.Meta.empty;
+    try testing.expectEqual(false, empty.hasComponents(&[_]type{C1}));
+    try testing.expectEqual(false, empty.hasComponents(&[_]type{C2}));
+    try testing.expectEqual(false, empty.hasComponents(&[_]type{ C1, C2 }));
+
     const meta1 = Archetype.Meta.from(&[_]type{C1});
     try testing.expectEqual(true, meta1.hasComponents(&[_]type{C1}));
     try testing.expectEqual(false, meta1.hasComponents(&[_]type{C2}));
@@ -285,6 +313,12 @@ test "Archetype.Meta.hasComponents" {
 
 test "Archetype.Meta.clone" {
     const alloc = testing.allocator;
+
+    const empty = Archetype.Meta.empty;
+    const empty_clone = try empty.clone(alloc);
+    defer empty_clone.deinit(alloc);
+    try testing.expectEqualDeep(empty, empty_clone);
+
     const C1 = struct {
         pub const cid = 1;
         x: u32,
@@ -300,6 +334,33 @@ test "Archetype.Meta.clone" {
     const meta_clone = try meta.clone(alloc);
     defer meta_clone.deinit(alloc);
     try testing.expectEqualDeep(meta, meta_clone);
+}
+
+test "Archetype with empty Meta" {
+    const alloc = testing.allocator;
+
+    var arch = try Archetype.init(alloc, .empty);
+    defer arch.deinit(alloc);
+
+    try testing.expectEqual(0, arch.components.len);
+
+    try arch.append(alloc, @as(Entity, 1), .{});
+    try arch.append(alloc, @as(Entity, 2), .{});
+    try arch.append(alloc, @as(Entity, 3), .{});
+    try arch.append(alloc, @as(Entity, 4), .{});
+
+    try testing.expectEqual(4, arch.len());
+
+    var it = arch.iter();
+    var count: usize = 0;
+    while (it.next()) |entity| {
+        switch (entity) {
+            1...4 => {},
+            else => unreachable,
+        }
+        count += 1;
+    }
+    try testing.expectEqual(4, count);
 }
 
 test "Archetype.Iterator" {
@@ -327,46 +388,54 @@ test "Archetype.Iterator" {
     var archetype = try Archetype.init(alloc, .from(&[_]type{ Position, Velocity }));
     defer archetype.deinit(alloc);
 
-    try archetype.append(alloc, .{ Position{ .x = 0, .y = 0 }, Velocity{ .x = 1, .y = 1 } });
-    try archetype.append(alloc, .{ Position{ .x = 100, .y = 100 }, Velocity{ .x = 0, .y = 0 } });
+    try archetype.append(alloc, @as(Entity, 0), .{ Position{ .x = 0, .y = 0 }, Velocity{ .x = 1, .y = 1 } });
+    try archetype.append(alloc, @as(Entity, 1), .{ Position{ .x = 100, .y = 100 }, Velocity{ .x = 0, .y = 0 } });
 
     try testing.expectEqual(2, archetype.len());
 
     var it = archetype.iter();
+    var count: usize = 0;
+    while (it.next()) |entity| {
+        count += 1;
+        switch (entity) {
+            0 => {
+                const p = it.get(PositionView);
+                try testing.expectEqual(0, p.x.*);
+                try testing.expectEqual(0, p.y.*);
 
-    try testing.expect(it.next() == true);
+                const pa = it.getAuto(Position);
+                try testing.expectEqual(0, pa.x.*);
+                try testing.expectEqual(0, pa.y.*);
 
-    const p1v = it.get(PositionView);
-    try testing.expectEqual(0, p1v.x.*);
-    try testing.expectEqual(0, p1v.y.*);
-    const p1 = it.getAuto(Position);
-    try testing.expectEqual(0, p1.x.*);
-    try testing.expectEqual(0, p1.y.*);
+                const v = it.get(VelocityView);
+                try testing.expectEqual(1, v.x.*);
+                try testing.expectEqual(1, v.y.*);
 
-    const v1v = it.get(VelocityView);
-    try testing.expectEqual(1, v1v.x.*);
-    try testing.expectEqual(1, v1v.y.*);
-    const v1 = it.getAuto(Velocity);
-    try testing.expectEqual(1, v1.x.*);
-    try testing.expectEqual(1, v1.y.*);
+                const va = it.getAuto(Velocity);
+                try testing.expectEqual(1, va.x.*);
+                try testing.expectEqual(1, va.y.*);
+            },
+            1 => {
+                const p = it.get(PositionView);
+                try testing.expectEqual(100, p.x.*);
+                try testing.expectEqual(100, p.y.*);
 
-    try testing.expect(it.next() == true);
+                const pa = it.getAuto(Position);
+                try testing.expectEqual(100, pa.x.*);
+                try testing.expectEqual(100, pa.y.*);
 
-    const p2v = it.get(PositionView);
-    try testing.expectEqual(100, p2v.x.*);
-    try testing.expectEqual(100, p2v.y.*);
-    const p2 = it.getAuto(Position);
-    try testing.expectEqual(100, p2.x.*);
-    try testing.expectEqual(100, p2.y.*);
+                const v = it.get(VelocityView);
+                try testing.expectEqual(0, v.x.*);
+                try testing.expectEqual(0, v.y.*);
 
-    const v2v = it.get(VelocityView);
-    try testing.expectEqual(0, v2v.x.*);
-    try testing.expectEqual(0, v2v.y.*);
-    const v2 = it.get(VelocityView);
-    try testing.expectEqual(0, v2.x.*);
-    try testing.expectEqual(0, v2.y.*);
-
-    try testing.expect(it.next() == false);
+                const va = it.getAuto(Velocity);
+                try testing.expectEqual(0, va.x.*);
+                try testing.expectEqual(0, va.y.*);
+            },
+            else => unreachable,
+        }
+    }
+    try testing.expectEqual(2, count);
 }
 
 const std = @import("std");

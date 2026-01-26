@@ -1,5 +1,3 @@
-pub const Entity = u32;
-
 pub const World = struct {
     next_entity: Entity,
     gpa: mem.Allocator,
@@ -33,11 +31,10 @@ pub const World = struct {
                 @compileError("expected tuple as argument");
         }
 
+        const e = self.next_entity;
         const types = util.typesOfTuple(components);
         var arch = try self.getOrCreateArchetype(.from(types));
-        try arch.append(self.gpa, components);
-
-        const e = self.next_entity;
+        try arch.append(self.gpa, e, components);
         try self.entity_archetype.put(e, arch.hash);
 
         self.next_entity += 1;
@@ -45,12 +42,12 @@ pub const World = struct {
         return e;
     }
 
-    fn getOrCreateArchetype(self: *Self, meta: Archetype.Meta) !Archetype {
+    fn getOrCreateArchetype(self: *Self, meta: Archetype.Meta) !*Archetype {
         const hash = meta.hash();
-        if (self.archetypes.get(hash)) |arch| return arch;
+        if (self.archetypes.getPtr(hash)) |arch_ptr| return arch_ptr;
         const arch = try Archetype.init(self.gpa, meta);
-        try self.archetypes.put(arch.hash, arch);
-        return arch;
+        try self.archetypes.put(hash, arch);
+        return self.archetypes.getPtr(hash) orelse unreachable;
     }
 
     pub fn query(self: *Self, comptime Comps: []const type) QueryIterator {
@@ -80,17 +77,17 @@ pub const World = struct {
         arch_iter: ArchetypeHashMap.ValueIterator,
         current_iter: ?Archetype.Iterator,
 
-        pub fn next(self: *QueryIterator) bool {
+        pub fn next(self: *QueryIterator) ?Entity {
             while (true) {
                 if (self.current_iter) |*arch_it| {
-                    if (arch_it.next()) return true;
+                    if (arch_it.next()) |entity| return entity;
                 }
                 const next_arch = while (true) {
                     if (self.arch_iter.next()) |arch| {
                         if (arch.meta.hasCIDs(self.cids))
                             break arch;
                     } else {
-                        return false;
+                        return null;
                     }
                 };
                 self.current_iter = next_arch.iter();
@@ -162,15 +159,12 @@ test "World.spawn" {
 
     var it = world.archetypes.valueIterator();
     var arch = it.next() orelse unreachable;
+    try testing.expectEqual(2, arch.entities.items.len);
     try testing.expectEqual(2, arch.len());
     try testing.expectEqual(null, it.next());
 }
 
 test "World.QueryIterator" {
-    const Flag = struct {
-        pub const cid = 0;
-        value: u8,
-    };
     const Position = struct {
         pub const cid = 1;
         x: u32,
@@ -186,40 +180,113 @@ test "World.QueryIterator" {
         x: u32,
         y: u32,
     };
+    const VelocityView = struct {
+        pub const Of = Velocity;
+        x: *u32,
+        y: *u32,
+    };
 
     const alloc = testing.allocator;
     var world = try World.init(alloc);
     defer world.deinit();
 
-    _ = try world.spawn(.{
-        Flag{ .value = 0 },
-        Position{ .x = 0, .y = 0 },
-    });
-    _ = try world.spawn(.{
-        Flag{ .value = 1 },
-        Position{ .x = 50, .y = 50 },
-        Velocity{ .x = 100, .y = 100 },
-    });
+    var entities = [_]Entity{
+        // 0
+        try world.spawn(.{
+            Position{ .x = 0, .y = 0 },
+            Velocity{ .x = 100, .y = 150 },
+        }),
+        // 1
+        try world.spawn(.{
+            Position{ .x = 10, .y = 10 },
+        }),
+        // 2
+        try world.spawn(.{
+            Position{ .x = 100, .y = 100 },
+            Velocity{ .x = 500, .y = 550 },
+        }),
+        // 3
+        try world.spawn(.{
+            Position{ .x = 1000, .y = 1000 },
+        }),
+        // 4
+        try world.spawn(.{
+            Velocity{ .x = 1000, .y = 1500 },
+        }),
+    };
+    try testing.expect(util.isUnique(Entity, &entities));
 
-    var it = world.query(&[_]type{ Position, Flag });
-    var count: usize = 0;
-    while (it.next()) {
-        count += 1;
-        switch (it.getAuto(Flag).value.*) {
-            0 => {
-                const p = it.get(PositionView);
+    {
+        // Position
+        var it = world.query(&[_]type{Position});
+        var count: usize = 0;
+        while (it.next()) |entity| {
+            count += 1;
+            const p = it.get(PositionView);
+            if (entity == entities[0]) {
                 try testing.expectEqual(0, p.x.*);
                 try testing.expectEqual(0, p.y.*);
-            },
-            1 => {
-                const p = it.get(PositionView);
-                try testing.expectEqual(50, p.x.*);
-                try testing.expectEqual(50, p.y.*);
-            },
-            else => unreachable,
+            } else if (entity == entities[1]) {
+                try testing.expectEqual(10, p.x.*);
+                try testing.expectEqual(10, p.y.*);
+            } else if (entity == entities[2]) {
+                try testing.expectEqual(100, p.x.*);
+                try testing.expectEqual(100, p.y.*);
+            } else if (entity == entities[3]) {
+                try testing.expectEqual(1000, p.x.*);
+                try testing.expectEqual(1000, p.y.*);
+            } else {
+                unreachable;
+            }
         }
+        try testing.expectEqual(4, count);
     }
-    try testing.expectEqual(2, count);
+    {
+        // Velocity
+        var it = world.query(&[_]type{Velocity});
+        var count: usize = 0;
+        while (it.next()) |entity| {
+            count += 1;
+            const v = it.get(VelocityView);
+            if (entity == entities[0]) {
+                try testing.expectEqual(100, v.x.*);
+                try testing.expectEqual(150, v.y.*);
+            } else if (entity == entities[2]) {
+                try testing.expectEqual(500, v.x.*);
+                try testing.expectEqual(550, v.y.*);
+            } else if (entity == entities[4]) {
+                try testing.expectEqual(1000, v.x.*);
+                try testing.expectEqual(1500, v.y.*);
+            } else {
+                unreachable;
+            }
+        }
+        try testing.expectEqual(3, count);
+    }
+    {
+        // Position + Velocity
+        var it = world.query(&[_]type{ Position, Velocity });
+        var count: usize = 0;
+        while (it.next()) |entity| {
+            count += 1;
+            const p = it.get(PositionView);
+            const v = it.get(VelocityView);
+            if (entity == entities[0]) {
+                try testing.expectEqual(0, p.x.*);
+                try testing.expectEqual(0, p.y.*);
+                try testing.expectEqual(100, v.x.*);
+                try testing.expectEqual(150, v.y.*);
+            } else if (entity == entities[2]) {
+                try testing.expectEqual(100, p.x.*);
+                try testing.expectEqual(100, p.y.*);
+                try testing.expectEqual(500, v.x.*);
+                try testing.expectEqual(550, v.y.*);
+            } else {
+                unreachable;
+            }
+        }
+        try testing.expectEqual(2, count);
+    }
 }
 
 const std = @import("std");
@@ -228,4 +295,7 @@ const testing = std.testing;
 const assert = std.debug.assert;
 
 const util = @import("util.zig");
-const Archetype = @import("archetype.zig").Archetype;
+const archetype = @import("archetype.zig");
+
+const Archetype = archetype.Archetype;
+const Entity = archetype.Entity;
