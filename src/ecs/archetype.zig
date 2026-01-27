@@ -19,16 +19,19 @@ pub const Archetype = struct {
         pub inline fn from(comptime Ts: []const type) Meta {
             if (Ts.len == 0)
                 return .{ .components = &[0]MultiField.Meta{} };
-
-            var metas: [Ts.len]MultiField.Meta = undefined;
-            inline for (Ts, 0..) |T, i| {
-                metas[i] = MultiField.Meta.from(T);
-            }
-            std.sort.insertion(MultiField.Meta, &metas, {}, struct {
-                fn lessThan(_: void, a: MultiField.Meta, b: MultiField.Meta) bool {
-                    return a.cid < b.cid;
+            const metas = comptime blk: {
+                var tmp: [Ts.len]MultiField.Meta = undefined;
+                for (Ts, 0..) |T, i| {
+                    tmp[i] = MultiField.Meta.from(T);
                 }
-            }.lessThan);
+                std.sort.insertion(MultiField.Meta, &tmp, {}, struct {
+                    fn lessThan(_: void, a: MultiField.Meta, b: MultiField.Meta) bool {
+                        return a.cid < b.cid;
+                    }
+                }.lessThan);
+
+                break :blk tmp;
+            };
             inline for (1..metas.len) |i| {
                 assert(metas[i - 1].cid != metas[i].cid);
             }
