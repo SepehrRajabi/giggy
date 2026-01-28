@@ -32,6 +32,23 @@ pub const MultiField = struct {
         pub fn deinit(self: *const Meta, gpa: mem.Allocator) void {
             gpa.free(self.fields);
         }
+
+        pub fn extract(self: *const Meta, comptime T: type, value: *const T, out: [][]const u8) void {
+            const ti = @typeInfo(T);
+
+            assert(ti == .@"struct");
+            assert(@hasDecl(T, "cid"));
+            assert(T.cid == self.cid);
+            const fields = ti.@"struct".fields;
+            assert(fields.len == self.fields.len);
+
+            inline for (fields, 0..) |f, i| {
+                const base_ptr = @intFromPtr(value);
+                const offset = @offsetOf(T, f.name);
+                const field_ptr = @as(*f.type, @ptrFromInt(base_ptr + offset));
+                out[i] = std.mem.asBytes(field_ptr);
+            }
+        }
     };
 
     pub fn init(gpa: mem.Allocator, meta: Meta) !Self {
@@ -60,20 +77,14 @@ pub const MultiField = struct {
     pub fn append(self: *Self, gpa: mem.Allocator, value: anytype) !void {
         const T = @TypeOf(value);
         const ti = @typeInfo(T);
-
         assert(ti == .@"struct");
-        assert(@hasDecl(T, "cid"));
-        assert(T.cid == self.meta.cid);
         const field_count = ti.@"struct".fields.len;
         assert(field_count == self.fields.len);
 
         var extracted: [field_count][]const u8 = undefined;
-        inline for (ti.@"struct".fields, 0..) |f, i| {
-            const field_ptr = &@field(value, f.name);
-            extracted[i] = std.mem.asBytes(field_ptr);
-        }
+        self.meta.extract(T, &value, &extracted);
 
-        try self.appendRaw(gpa, extracted[0..]);
+        try self.appendRaw(gpa, &extracted);
     }
 
     pub fn appendRaw(self: *Self, gpa: mem.Allocator, data: []const []const u8) !void {
@@ -150,6 +161,28 @@ test "MultiField.Meta.clone" {
     const meta_clone = try meta.clone(alloc);
     defer meta_clone.deinit(alloc);
     try testing.expectEqualDeep(meta, meta_clone);
+}
+
+test "MultiField.Meta.extract" {
+    const C = struct {
+        const cid = 1;
+        x: u32,
+        y: u32,
+    };
+    const meta: MultiField.Meta = .from(C);
+    var extracted: [2][]const u8 = undefined;
+    meta.extract(C, &C{
+        .x = 10,
+        .y = 20,
+    }, &extracted);
+    try testing.expectEqual(
+        @as(u32, 10),
+        mem.bytesAsValue(u32, extracted[0]).*,
+    );
+    try testing.expectEqual(
+        @as(u32, 20),
+        mem.bytesAsValue(u32, extracted[1]).*,
+    );
 }
 
 test "MultiField.appendRaw" {

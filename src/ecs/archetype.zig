@@ -38,16 +38,43 @@ pub const Archetype = struct {
             return .{ .components = &metas };
         }
 
-        pub fn clone(self: *const Meta, gpa: mem.Allocator) !Meta {
-            var comps = try gpa.alloc(MultiField.Meta, self.components.len);
-            for (comps, 0..) |_, i| {
-                comps[i] = self.components[i].clone(gpa) catch |err| {
-                    for (0..i) |j|
-                        comps[j].deinit(gpa);
-                    return err;
-                };
+        pub fn join(self: *const Meta, gpa: mem.Allocator, with: *const Meta) !Meta {
+            var out = try std.ArrayList(MultiField.Meta)
+                .initCapacity(gpa, self.components.len + with.components.len);
+            errdefer out.deinit(gpa);
+            errdefer for (out.items) |item| {
+                item.deinit(gpa);
+            };
+            const i_comp = self.components;
+            const j_comp = with.components;
+            var i: usize = 0;
+            var j: usize = 0;
+            while (true) {
+                const plus_i = i < i_comp.len and
+                    (j >= j_comp.len or i_comp[i].cid < j_comp[j].cid);
+                const plus_j = j < j_comp.len and
+                    (i >= i_comp.len or j_comp[j].cid <= i_comp[i].cid);
+                var to_add: MultiField.Meta = undefined;
+                if (plus_i) {
+                    to_add = i_comp[i];
+                    i += 1;
+                } else if (plus_j) {
+                    to_add = j_comp[j];
+                    j += 1;
+                } else {
+                    break;
+                }
+                if (out.getLastOrNull()) |last| {
+                    if (last.cid == to_add.cid) continue;
+                    assert(last.cid < to_add.cid);
+                }
+                try out.append(gpa, try to_add.clone(gpa));
             }
-            return .{ .components = comps };
+            return .{ .components = try out.toOwnedSlice(gpa) };
+        }
+
+        pub fn clone(self: *const Meta, gpa: mem.Allocator) !Meta {
+            return self.join(gpa, &.empty);
         }
 
         pub fn deinit(self: *const Meta, gpa: mem.Allocator) void {
