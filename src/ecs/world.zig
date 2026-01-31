@@ -60,29 +60,48 @@ pub const World = struct {
                 @compileError("expected tuple as argument");
         }
 
-        const Ts = util.typesFromTuple(new_components);
-        const new_meta: Archetype.Meta = .from(Ts);
         var src_arch = self.archetypeOf(entity).?;
-        const src_index = src_arch.indexOf(entity);
+        const src_index = src_arch.indexOf(entity).?;
         const src_meta = src_arch.meta;
-        const dst_meta = try src_meta.join(self.gpa, new_meta);
-        // var dst_arch = try self.getOrCreateArchetype(dst_meta);
 
-        var row = try self.gpa.alloc([][]const u8, dst_meta.components.len);
-        defer self.gpa.free(row);
-        for (dst_meta.components, 0..) |comp, i| {
-            if (src_arch.indexOfCID(comp.cid)) |comp_idx| {
-                const fields = src_arch
-                    .components[comp_idx]
+        const Ts = util.typesOfTuple(new_components);
+        const new_meta = comptime Archetype.Meta.from(Ts);
+        const dst_hash = src_meta.hashJoined(&new_meta);
+
+        const dst_arch = blk: {
+            if (self.getArchetype(dst_hash)) |arch| {
+                break :blk arch;
+            }
+            const dst_meta = try src_meta.join(self.gpa, &new_meta);
+            defer dst_meta.deinit(self.gpa);
+            break :blk try self.createArchetype(dst_meta);
+        };
+        const dst_meta = dst_arch.meta;
+
+        assert(dst_meta.components.len == src_meta.components.len + Ts.len);
+
+        const before_size = dst_arch.len();
+        errdefer dst_arch.setComponentsSize(before_size);
+
+        const dst_index = try dst_arch.appendEntity(self.gpa, entity);
+        errdefer _ = dst_arch.removeEntity(dst_index);
+
+        try dst_arch.appendPartial(self.gpa, new_components);
+
+        for (dst_meta.components, 0..) |comp, dst_idx| {
+            if (src_arch.indexOfCID(comp.cid)) |src_idx| {
+                const fields_src = src_arch
+                    .components[src_idx]
                     .fields;
-                row[i] = try self.gpa.alloc([]const u8, fields.len);
-                for (row[i], 0..) |_, j| {
-                    row[i][j] = fields.atRaw(src_index);
-                }
-            } else {
-                // TODO
+                const fields_dst = dst_arch
+                    .components[dst_idx]
+                    .fields;
+                for (fields_src, fields_dst) |src, *dst|
+                    try dst.appendRaw(self.gpa, src.atRaw(src_index));
             }
         }
+
+        _ = src_arch.remove(src_index);
     }
 
     pub fn archetypeOf(self: *Self, entity: Entity) ?*Archetype {
@@ -112,7 +131,16 @@ pub const World = struct {
 
     fn getOrCreateArchetype(self: *Self, meta: Archetype.Meta) !*Archetype {
         const hash = meta.hash();
-        if (self.archetypes.getPtr(hash)) |arch_ptr| return arch_ptr;
+        if (self.getArchetype(hash)) |arch_ptr| return arch_ptr;
+        return self.createArchetype(meta);
+    }
+
+    fn getArchetype(self: *const Self, hash: u64) ?*Archetype {
+        return self.archetypes.getPtr(hash);
+    }
+
+    fn createArchetype(self: *Self, meta: Archetype.Meta) !*Archetype {
+        const hash = meta.hash();
         const arch = try Archetype.init(self.gpa, meta);
         try self.archetypes.put(hash, arch);
         return self.archetypes.getPtr(hash) orelse unreachable;
@@ -417,6 +445,88 @@ test "World.QueryIterator" {
             }
         }
         try testing.expectEqual(2, count);
+    }
+}
+
+test "World.assign" {
+    const Position = struct {
+        pub const cid = 1;
+        x: u32,
+        y: u32,
+    };
+    const PositionView = struct {
+        pub const Of = Position;
+        x: *u32,
+        y: *u32,
+    };
+    const Velocity = struct {
+        pub const cid = 2;
+        x: u32,
+        y: u32,
+    };
+    const VelocityView = struct {
+        pub const Of = Velocity;
+        x: *u32,
+        y: *u32,
+    };
+
+    const alloc = testing.allocator;
+    var world = try World.init(alloc);
+    defer world.deinit();
+
+    const entities = [_]u32{
+        // 0
+        try world.spawn(.{
+            Position{ .x = 0, .y = 0 },
+        }),
+        // 1
+        try world.spawn(.{
+            Position{ .x = 0, .y = 0 },
+        }),
+    };
+
+    try world.assign(entities[1], .{
+        Velocity{ .x = 100, .y = 100 },
+    });
+
+    {
+        // Position
+        var it = world.query(&[_]type{Position});
+        var count: usize = 0;
+        while (it.next()) |entity| {
+            count += 1;
+            const p = it.get(PositionView);
+            if (entity == entities[0]) {
+                try testing.expectEqual(0, p.x.*);
+                try testing.expectEqual(0, p.y.*);
+            } else if (entity == entities[1]) {
+                try testing.expectEqual(0, p.x.*);
+                try testing.expectEqual(0, p.y.*);
+            } else {
+                std.debug.print("{d}\n", .{entity});
+                unreachable;
+            }
+        }
+        try testing.expectEqual(2, count);
+    }
+    {
+        // Position + Velocity
+        var it = world.query(&[_]type{ Position, Velocity });
+        var count: usize = 0;
+        while (it.next()) |entity| {
+            count += 1;
+            const p = it.get(PositionView);
+            const v = it.get(VelocityView);
+            if (entity == entities[1]) {
+                try testing.expectEqual(0, p.x.*);
+                try testing.expectEqual(0, p.y.*);
+                try testing.expectEqual(100, v.x.*);
+                try testing.expectEqual(100, v.y.*);
+            } else {
+                unreachable;
+            }
+        }
+        try testing.expectEqual(1, count);
     }
 }
 

@@ -90,6 +90,38 @@ pub const Archetype = struct {
             return hasher.final();
         }
 
+        pub fn hashJoined(self: *const Meta, with: *const Meta) u64 {
+            var hasher = std.hash.Wyhash.init(0);
+
+            const i_comp = self.components;
+            const j_comp = with.components;
+            var i: usize = 0;
+            var j: usize = 0;
+            var last: ?u32 = null;
+
+            while (true) {
+                const plus_i = i < i_comp.len and
+                    (j >= j_comp.len or i_comp[i].cid < j_comp[j].cid);
+                const plus_j = j < j_comp.len and
+                    (i >= i_comp.len or j_comp[j].cid <= i_comp[i].cid);
+                var to_add: u32 = undefined;
+                if (plus_i) {
+                    to_add = i_comp[i].cid;
+                    i += 1;
+                } else if (plus_j) {
+                    to_add = j_comp[j].cid;
+                    j += 1;
+                } else {
+                    break;
+                }
+                if (last) |l| assert(l != to_add);
+                hasher.update(mem.asBytes(&to_add));
+                last = to_add;
+            }
+
+            return hasher.final();
+        }
+
         pub fn hasComponents(self: *const Meta, comptime Comps: []const type) bool {
             var cids: [Comps.len]u32 = undefined;
             inline for (Comps, 0..) |C, i| {
@@ -175,9 +207,18 @@ pub const Archetype = struct {
     pub fn append(self: *Self, gpa: mem.Allocator, entity: Entity, component_list: anytype) !void {
         const ti = @typeInfo(@TypeOf(component_list));
         assert(ti == .@"struct");
+        const fields_len = ti.@"struct".fields.len;
+        assert(fields_len == self.components.len);
 
+        const index = try self.appendEntity(gpa, entity);
+        errdefer _ = self.removeEntity(index);
+        try self.appendPartial(gpa, component_list);
+    }
+
+    pub fn appendPartial(self: *Self, gpa: mem.Allocator, component_list: anytype) !void {
+        const ti = @typeInfo(@TypeOf(component_list));
+        assert(ti == .@"struct");
         const fields = ti.@"struct".fields;
-        assert(fields.len == self.components.len);
 
         var cid_indexes: [fields.len]usize = undefined;
         inline for (fields, 0..) |f, i| {
@@ -191,10 +232,6 @@ pub const Archetype = struct {
             for (0..i) |j| if (cid_indexes[i] == cid_indexes[j]) unreachable;
         }
 
-        try self.entities_index.put(entity, self.len());
-        errdefer _ = self.entities_index.remove(entity);
-        try self.entities.append(gpa, entity);
-        errdefer _ = self.entities.pop();
         inline for (fields, cid_indexes, 0..) |f, cid_idx, i| {
             const value = @field(component_list, f.name);
             self.components[cid_idx].append(gpa, value) catch |err| {
@@ -203,6 +240,14 @@ pub const Archetype = struct {
                 return err;
             };
         }
+    }
+
+    pub fn appendEntity(self: *Self, gpa: mem.Allocator, entity: Entity) !usize {
+        const new_index = self.entities.items.len;
+        try self.entities_index.put(entity, new_index);
+        errdefer _ = self.entities_index.remove(entity);
+        try self.entities.append(gpa, entity);
+        return new_index;
     }
 
     pub fn appendRaw(self: *Self, gpa: mem.Allocator, entity: Entity, data: []const []const []const u8) !void {
@@ -222,10 +267,15 @@ pub const Archetype = struct {
 
     pub fn remove(self: *Self, index: usize) Entity {
         assert(index < self.len());
-        const entity = self.entities.swapRemove(index);
-        _ = self.entities_index.remove(entity);
+        const entity = self.removeEntity(index);
         for (self.components) |*comp|
             comp.remove(index);
+        return entity;
+    }
+
+    pub fn removeEntity(self: *Self, index: usize) Entity {
+        const entity = self.entities.swapRemove(index);
+        _ = self.entities_index.remove(entity);
         return entity;
     }
 
@@ -291,6 +341,11 @@ pub const Archetype = struct {
         for (self.components) |comp|
             assert(l == comp.len());
         return l;
+    }
+
+    pub fn setComponentsSize(self: *Self, size: usize) void {
+        for (self.components) |*comp|
+            comp.setSize(size);
     }
 
     pub fn indexOfCID(self: *const Self, cid: u32) ?usize {

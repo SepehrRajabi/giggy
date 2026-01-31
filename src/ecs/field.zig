@@ -81,6 +81,12 @@ pub const Field = struct {
         return self.buffer.items.len / self.meta.size;
     }
 
+    pub fn setSize(self: *Self, size: usize) void {
+        const new_len = size * self.meta.size;
+        assert(new_len <= self.buffer.items.len);
+        self.buffer.items.len = size * self.meta.size;
+    }
+
     pub inline fn at(self: *const Self, comptime T: type, index: usize) *T {
         return @alignCast(mem.bytesAsValue(T, self.atRaw(index)));
     }

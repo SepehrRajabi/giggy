@@ -113,6 +113,11 @@ pub const MultiField = struct {
             assert(f.len() == l);
         return l;
     }
+
+    pub fn setSize(self: *Self, size: usize) void {
+        for (self.fields) |*f|
+            f.setSize(size);
+    }
 };
 
 test "MultiField.Meta.from" {
