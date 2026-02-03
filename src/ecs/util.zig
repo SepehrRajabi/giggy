@@ -18,23 +18,13 @@ test isUnique {
     try testing.expectEqual(false, isUnique(u8, &array3));
 }
 
-pub fn typesOfTuple(tuple: anytype) []type {
-    if (!isTuple(tuple))
-        @compileError("input must be a tuple");
-    const fields = meta.fields(@TypeOf(tuple));
+pub fn typesOfBundle(comptime Bundle: type) []type {
+    const ti = @typeInfo(Bundle);
+    if (ti != .@"struct") @compileError("Bundle should be a struct");
+    const fields = ti.@"struct".fields;
     var out: [fields.len]type = undefined;
     for (fields, 0..) |f, i|
         out[i] = f.type;
-    return out[0..];
-}
-
-pub fn typesFromTuple(tuple: anytype) []type {
-    if (!isTuple(tuple))
-        @compileError("input must be a tuple");
-    const fields = meta.fields(@TypeOf(tuple));
-    var out: [fields.len]type = undefined;
-    for (fields, 0..) |f, i|
-        out[i] = @field(tuple, f.name);
     return out[0..];
 }
 
@@ -60,33 +50,9 @@ test isComponent {
     }));
 }
 
-pub fn isTuple(arg: anytype) bool {
-    const ti = @typeInfo(@TypeOf(arg));
-    if (ti != .@"struct") return false;
-    return ti.@"struct".is_tuple;
-}
-
-test isTuple {
-    try testing.expectEqual(true, isTuple(.{@as(u8, 10)}));
-    try testing.expectEqual(true, isTuple(.{u8}));
-    try testing.expectEqual(true, isTuple(.{ u8, u16 }));
-    try testing.expectEqual(false, isTuple(@as(u8, 10)));
-    try testing.expectEqual(false, isTuple(u8));
-
-    const Position = struct {
-        pub const cid = 1;
-        x: u32,
-        y: u32,
-    };
-    const Velocity = struct {
-        pub const cid = 2;
-        x: u32,
-        y: u32,
-    };
-    try testing.expectEqual(true, isTuple(.{
-        Position{ .x = 0, .y = 0 },
-        Velocity{ .x = 1, .y = 1 },
-    }));
+pub fn isBundle(comptime Bundle: type) bool {
+    const ti = @typeInfo(Bundle);
+    return ti == .@"struct";
 }
 
 pub fn ViewOf(comptime C: type) type {
