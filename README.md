@@ -52,12 +52,14 @@ This ECS uses:
 ### Minimal Game
 The repo is already wired for a tiny playable loop: spawn entities, mutate components through the command buffer, and flush those commands into the `World`.
 
-- [ ] Define a mini-game
-- [ ] Define components — every struct that is a component needs a `pub const cid`
-- [ ] Spawn entities via `World.spawn` or `CommandBuffer.spawn`. Create bundles (structs with one component field per component) and let `Archetype.Meta.from` build the metadata
-- [ ] Mutate via command buffer — the buffer supported `spawn`, `despawn`, `assign`, and `unassign` commands
-- [ ] Read state via `world.get(View, entity)` or `world.getAuto(Component, entity)` to drive rendering / logic
-- [ ] Render game with Raylib
+- [X] Define a mini-game
+- [X] Define components — every struct that is a component needs a `pub const cid`
+- [X] Spawn entities via `World.spawn` or `CommandBuffer.spawn`. Create bundles (structs with one component field per component) and let `Archetype.Meta.from` build the metadata
+- [X] Mutate via command buffer — the buffer supported `spawn`, `despawn`, `assign`, and `unassign` commands
+- [X] Read state via `world.get(View, entity)` or `world.getAuto(Component, entity)` to drive rendering / logic
+- [X] Render game with Raylib
+
+![Splitting blobs sample](assets/images/screenshot.png)
 
 ---
 
@@ -80,4 +82,3 @@ $ zig zen
  * Memory is a resource.
  * Together we serve the users.
 ```
-

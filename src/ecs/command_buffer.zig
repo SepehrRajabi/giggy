@@ -1,4 +1,4 @@
-const CommandBuffer = struct {
+pub const CommandBuffer = struct {
     commands: CommandList,
     bytes: Buffer,
     gpa: mem.Allocator,
