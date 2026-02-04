@@ -43,6 +43,14 @@ pub const World = struct {
         return e;
     }
 
+    pub fn spawnBytes(self: *Self, entity: Entity, meta: *const Archetype.Meta, bytes: []const u8) !void {
+        var arch = try self.getOrCreateArchetype(meta.*);
+        try arch.appendBytes(self.gpa, entity, bytes);
+        try self.entity_archetype.put(entity, arch.hash);
+        if (entity >= self.next_entity)
+            self.next_entity = entity + 1;
+    }
+
     pub fn reserveEntity(self: *Self) Entity {
         const e = self.next_entity;
         self.next_entity += 1;
@@ -112,6 +120,51 @@ pub const World = struct {
         assert(removed_entity == entity);
     }
 
+    pub fn assignBytes(self: *Self, entity: Entity, new_meta: *const Archetype.Meta, bytes: []const u8) !void {
+        var src_arch = self.archetypeOf(entity).?;
+        const src_index = src_arch.indexOf(entity).?;
+        const src_meta = src_arch.meta;
+
+        const dst_hash = src_meta.hashJoined(new_meta);
+
+        const dst_arch = blk: {
+            if (self.getArchetype(dst_hash)) |arch|
+                break :blk arch;
+            const dst_meta = try src_meta.join(self.gpa, new_meta);
+            defer dst_meta.deinit(self.gpa);
+            break :blk try self.createArchetype(dst_meta);
+        };
+        const dst_meta = dst_arch.meta;
+
+        assert(dst_meta.components.len == src_meta.components.len + new_meta.components.len);
+
+        const before_size = dst_arch.len();
+        errdefer dst_arch.setComponentsSize(before_size);
+
+        try dst_arch.appendPartialBytes(self.gpa, new_meta, bytes);
+
+        const dst_index = try dst_arch.appendEntity(self.gpa, entity);
+        errdefer _ = dst_arch.removeEntity(dst_index);
+
+        for (dst_meta.components, 0..) |comp, dst_idx| {
+            if (src_arch.indexOfCID(comp.cid)) |src_idx| {
+                const fields_src = src_arch
+                    .components[src_idx]
+                    .fields;
+                const fields_dst = dst_arch
+                    .components[dst_idx]
+                    .fields;
+                for (fields_src, fields_dst) |src, *dst|
+                    try dst.appendBytes(self.gpa, src.atRaw(src_index));
+            }
+        }
+
+        try self.entity_archetype.put(entity, dst_hash);
+
+        const removed_entity = src_arch.remove(src_index);
+        assert(removed_entity == entity);
+    }
+
     pub fn unassign(self: *Self, entity: Entity, comptime Bundle: type) !void {
         comptime {
             if (!util.isBundle(Bundle)) @compileError("expected Bundle as argument");
@@ -144,6 +197,48 @@ pub const World = struct {
         var c: usize = 0;
         for (dst_meta.components, 0..) |comp, dst_idx| {
             c += 1;
+            const src_idx = src_arch.indexOfCID(comp.cid).?;
+            const fields_src = src_arch
+                .components[src_idx]
+                .fields;
+            const fields_dst = dst_arch
+                .components[dst_idx]
+                .fields;
+            for (fields_src, fields_dst) |src, *dst|
+                try dst.appendBytes(self.gpa, src.atRaw(src_index));
+        }
+
+        try self.entity_archetype.put(entity, dst_hash);
+
+        const removed_entity = src_arch.remove(src_index);
+        assert(removed_entity == entity);
+    }
+
+    pub fn unassignMeta(self: *Self, entity: Entity, rm_meta: *const Archetype.Meta) !void {
+        var src_arch = self.archetypeOf(entity).?;
+        const src_index = src_arch.indexOf(entity).?;
+        const src_meta = src_arch.meta;
+
+        const dst_hash = src_meta.hashDejoined(rm_meta);
+
+        const dst_arch = blk: {
+            if (self.getArchetype(dst_hash)) |arch|
+                break :blk arch;
+            const dst_meta = try src_meta.dejoin(self.gpa, rm_meta);
+            defer dst_meta.deinit(self.gpa);
+            break :blk try self.createArchetype(dst_meta);
+        };
+        const dst_meta = dst_arch.meta;
+
+        assert(src_meta.components.len == dst_meta.components.len + rm_meta.components.len);
+
+        const before_size = dst_arch.len();
+        errdefer dst_arch.setComponentsSize(before_size);
+
+        const dst_index = try dst_arch.appendEntity(self.gpa, entity);
+        errdefer _ = dst_arch.removeEntity(dst_index);
+
+        for (dst_meta.components, 0..) |comp, dst_idx| {
             const src_idx = src_arch.indexOfCID(comp.cid).?;
             const fields_src = src_arch
                 .components[src_idx]
@@ -631,6 +726,72 @@ test "World.{assign,unassign}" {
             unreachable;
         }
     }
+}
+
+test "World.{spawnBytes,assignBytes,unassignMeta}" {
+    const Position = struct {
+        pub const cid = 1;
+        x: u32,
+        y: u16,
+    };
+    const Velocity = struct {
+        pub const cid = 2;
+        dx: u8,
+        dy: u32,
+    };
+
+    const alloc = testing.allocator;
+    var world = try World.init(alloc);
+    defer world.deinit();
+
+    const PV = struct { Position, Velocity };
+    const P = struct { Position };
+    const V = struct { Velocity };
+
+    const entity = @as(Entity, 7);
+    const bundle_pv = PV{
+        Position{ .x = 11, .y = 22 },
+        Velocity{ .dx = 33, .dy = 44 },
+    };
+
+    const types_pv = util.typesOfBundle(PV);
+    const meta_pv: Archetype.Meta = comptime .from(types_pv);
+    var bytes_pv: [meta_pv.size()]u8 = undefined;
+    meta_pv.extractBytes(PV, &bundle_pv, bytes_pv[0..]);
+    try world.spawnBytes(entity, &meta_pv, bytes_pv[0..]);
+
+    try testing.expectEqual(@as(usize, 1), world.count());
+    const pos_view = world.getAuto(Position, entity).?;
+    try testing.expectEqual(@as(u32, 11), pos_view.x.*);
+    try testing.expectEqual(@as(u16, 22), pos_view.y.*);
+    const vel_view = world.getAuto(Velocity, entity).?;
+    try testing.expectEqual(@as(u8, 33), vel_view.dx.*);
+    try testing.expectEqual(@as(u32, 44), vel_view.dy.*);
+
+    const next = try world.spawn(P, .{
+        Position{ .x = 1, .y = 2 },
+    });
+    try testing.expectEqual(@as(Entity, 8), next);
+
+    const bundle_v = V{
+        Velocity{ .dx = 9, .dy = 99 },
+    };
+    const types_v = util.typesOfBundle(V);
+    const meta_v: Archetype.Meta = comptime .from(types_v);
+    var bytes_v: [meta_v.size()]u8 = undefined;
+    meta_v.extractBytes(V, &bundle_v, bytes_v[0..]);
+    try world.assignBytes(next, &meta_v, bytes_v[0..]);
+
+    const vel_view2 = world.getAuto(Velocity, next).?;
+    try testing.expectEqual(@as(u8, 9), vel_view2.dx.*);
+    try testing.expectEqual(@as(u32, 99), vel_view2.dy.*);
+
+    const types_p = util.typesOfBundle(P);
+    const meta_p: Archetype.Meta = comptime .from(types_p);
+    try world.unassignMeta(next, &meta_p);
+    const arch = world.archetypeOf(next).?;
+    try testing.expect(!arch.meta.hasComponents(&[_]type{Position}));
+    try testing.expect(arch.meta.hasComponents(&[_]type{Velocity}));
 }
 
 const std = @import("std");

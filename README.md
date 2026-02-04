@@ -45,7 +45,7 @@ This ECS uses:
 - [X] Despawn a game entity
 - [X] Assign components to a game entity
 - [X] Unassign components from a game entity
-- [ ] Flush command buffer at a safe sync point to the world
+- [X] Flush command buffer at a safe sync point to the world
 
 ---
 

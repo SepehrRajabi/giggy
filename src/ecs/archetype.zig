@@ -87,7 +87,7 @@ pub const Archetype = struct {
             const j_comp = with.components;
             var j: usize = 0;
             for (self.components) |comp| {
-                while (j >= j_comp.len or j_comp[j].cid < comp.cid) : (j += 1) {}
+                while (j < j_comp.len and j_comp[j].cid < comp.cid) : (j += 1) {}
                 if (j < j_comp.len and j_comp[j].cid == comp.cid)
                     continue;
                 try out.append(gpa, try comp.clone(gpa));
@@ -151,7 +151,7 @@ pub const Archetype = struct {
             const j_comp = with.components;
             var j: usize = 0;
             for (self.components) |comp| {
-                while (j >= j_comp.len or j_comp[j].cid < comp.cid) : (j += 1) {}
+                while (j < j_comp.len and j_comp[j].cid < comp.cid) : (j += 1) {}
                 if (j < j_comp.len and j_comp[j].cid == comp.cid)
                     continue;
                 hasher.update(mem.asBytes(&comp.cid));

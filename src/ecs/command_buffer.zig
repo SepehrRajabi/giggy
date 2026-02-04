@@ -110,6 +110,33 @@ const CommandBuffer = struct {
             .size = 0,
         });
     }
+
+    pub fn flush(self: *Self, world_ref: *World) !void {
+        for (self.commands.items) |cmd| {
+            switch (cmd.tag) {
+                .spawn => {
+                    const meta = cmd.meta.?;
+                    const bytes = self.bytes.items[cmd.offset .. cmd.offset + cmd.size];
+                    try world_ref.spawnBytes(cmd.entity, meta, bytes);
+                },
+                .despawn => {
+                    _ = world_ref.despawn(cmd.entity);
+                },
+                .assign => {
+                    const meta = cmd.meta.?;
+                    const bytes = self.bytes.items[cmd.offset .. cmd.offset + cmd.size];
+                    try world_ref.assignBytes(cmd.entity, meta, bytes);
+                },
+                .unassign => {
+                    const meta = cmd.meta.?;
+                    try world_ref.unassignMeta(cmd.entity, meta);
+                },
+            }
+        }
+
+        self.commands.clearRetainingCapacity();
+        self.bytes.clearRetainingCapacity();
+    }
 };
 
 const std = @import("std");
@@ -248,4 +275,57 @@ test "CommandBuffer.unassign stores command" {
     try testing.expect(cmd.meta != null);
     try testing.expectEqual(@as(usize, 0), cmd.size);
     try testing.expectEqual(@as(usize, 0), buffer.bytes.items.len);
+}
+
+test "CommandBuffer.flush applies to World" {
+    const alloc = testing.allocator;
+    var buffer = try CommandBuffer.init(alloc);
+    defer buffer.deinit();
+
+    var w = try World.init(alloc);
+    defer w.deinit();
+
+    const Position = struct {
+        pub const cid = 1;
+        x: u32,
+        y: u16,
+    };
+    const Velocity = struct {
+        pub const cid = 2;
+        dx: u8,
+        dy: u32,
+    };
+    const P = struct { pos: Position };
+    const V = struct { vel: Velocity };
+
+    const e = w.reserveEntity();
+    try buffer.spawn(e, P, .{ .pos = .{ .x = 7, .y = 9 } });
+    try buffer.flush(&w);
+
+    const pos_view = w.getAuto(Position, e).?;
+    try testing.expectEqual(@as(u32, 7), pos_view.x.*);
+    try testing.expectEqual(@as(u16, 9), pos_view.y.*);
+    {
+        const arch = w.archetypeOf(e).?;
+        try testing.expect(!arch.meta.hasComponents(&[_]type{Velocity}));
+    }
+
+    try buffer.assign(e, V, .{ .vel = .{ .dx = 3, .dy = 11 } });
+    try buffer.flush(&w);
+
+    const vel_view = w.getAuto(Velocity, e).?;
+    try testing.expectEqual(@as(u8, 3), vel_view.dx.*);
+    try testing.expectEqual(@as(u32, 11), vel_view.dy.*);
+
+    try buffer.unassign(e, P);
+    try buffer.flush(&w);
+    {
+        const arch = w.archetypeOf(e).?;
+        try testing.expect(!arch.meta.hasComponents(&[_]type{Position}));
+        try testing.expect(arch.meta.hasComponents(&[_]type{Velocity}));
+    }
+
+    try buffer.despawn(e);
+    try buffer.flush(&w);
+    try testing.expectEqual(@as(usize, 0), w.count());
 }
