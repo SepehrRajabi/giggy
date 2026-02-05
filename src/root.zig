@@ -1,5 +1,4 @@
-const examples = @import("examples.zig");
-const game = @import("main.zig");
+const game = @import("game/main.zig");
 
 pub fn main() !void {
     try game.main();
