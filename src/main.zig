@@ -93,7 +93,7 @@ pub fn main() anyerror!void {
         const dt = rl.GetFrameTime();
 
         var mover = world.query(&[_]type{ Position, Velocity, Radius });
-        while (mover.next()) |_| {
+        while (mover.next()) |entity| {
             const p = mover.get(PositionView);
             const v = mover.get(VelocityView);
             const r = mover.get(RadiusView);
@@ -121,15 +121,20 @@ pub fn main() anyerror!void {
                 bounced = true;
             }
 
-            if (bounced and r.value.* >= splitCfg.minRadius * 2) {
-                const childRadius = r.value.* * splitCfg.factor;
-                r.value.* = childRadius;
-                const child = BlobBundle{
-                    .pos = Position{ .x = p.x.*, .y = p.y.* },
-                    .vel = randomVelocity(&prngs),
-                    .radius = Radius{ .value = childRadius },
-                };
-                try spawnBlob(&command_buf, &world, child);
+            if (bounced) {
+                if (r.value.* >= splitCfg.minRadius * 2) {
+                    const childRadius = r.value.* * splitCfg.factor;
+                    r.value.* = childRadius;
+                    const child = BlobBundle{
+                        .pos = Position{ .x = p.x.*, .y = p.y.* },
+                        .vel = randomVelocity(&prngs),
+                        .radius = Radius{ .value = childRadius },
+                    };
+                    const e = world.reserveEntity();
+                    try command_buf.spawn(e, child);
+                } else {
+                    try command_buf.despawn(entity);
+                }
             }
         }
 
@@ -158,11 +163,6 @@ pub fn main() anyerror!void {
         rl.DrawText("Buffers flush at sync points; blobs split on walls.", 10, 10, 16, rl.DARKGRAY);
         rl.DrawFPS(10, screenHeight - 30);
     }
-}
-
-fn spawnBlob(cmd: *ecs.CommandBuffer, world: *ecs.World, bundle: BlobBundle) !void {
-    const e = world.reserveEntity();
-    try cmd.spawn(e, bundle);
 }
 
 fn randomVelocity(prng: *std.Random.Xoshiro256) Velocity {

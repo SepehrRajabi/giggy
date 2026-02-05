@@ -408,7 +408,16 @@ pub const Archetype = struct {
     }
 
     pub fn removeEntity(self: *Self, index: usize) Entity {
+        const old_len = self.entities.items.len;
         const entity = self.entities.swapRemove(index);
+
+        const new_len = old_len - 1;
+        if (index < new_len) {
+            const swapped_entity = self.entities.items[index];
+            const entry = self.entities_index.getEntry(swapped_entity) orelse unreachable;
+            entry.value_ptr.* = index;
+        }
+
         _ = self.entities_index.remove(entity);
         return entity;
     }
