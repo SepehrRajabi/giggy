@@ -6,3 +6,6 @@ zig-out/
 dep/
 lib/
 include/
+
+# other files
+gimp/

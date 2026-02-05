@@ -13,19 +13,19 @@ pub fn main() !void {
 
     // load resources
     const textures = [_]rl.Texture2D{
-        rl.LoadTexture("map.png"),
+        rl.LoadTexture("resources/map.png"),
     };
     defer for (textures) |t| rl.UnloadTexture(t);
 
     const models = [_]rl.Model{
-        rl.LoadModel("gltf/greenman.glb"),
+        rl.LoadModel("resources/gltf/greenman.glb"),
     };
     defer for (models) |m| rl.UnloadModel(m);
 
     const shaders = [_]rl.Shader{
         rl.LoadShader(
-            "shaders/glsl330/skinning.vs",
-            "shaders/glsl330/skinning.fs",
+            "resources/shaders/glsl330/skinning.vs",
+            "resources/shaders/glsl330/skinning.fs",
         ),
     };
     defer for (shaders) |s| rl.UnloadShader(s);
@@ -33,7 +33,7 @@ pub fn main() !void {
     models[0].materials[1].shader = shaders[0];
 
     const model_animations = [_][]rl.ModelAnimation{
-        loadModelAnimations("gltf/greenman.glb"),
+        loadModelAnimations("resources/gltf/greenman.glb"),
     };
     defer for (model_animations) |ma| unloadModelAnimations(ma);
 
