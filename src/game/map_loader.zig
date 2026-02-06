@@ -1,7 +1,23 @@
 pub const Layer = struct {
-    name: []const u8,
     points: []Point,
     polygons: []Polygon,
+    rectangles: []Rectangle,
+    images: []Image,
+};
+
+pub const Image = struct {
+    name: []const u8,
+    position: Vertex,
+    width: f32,
+    height: f32,
+    index: usize,
+};
+
+pub const Rectangle = struct {
+    name: []const u8,
+    position: Vertex,
+    width: f32,
+    height: f32,
 };
 
 pub const Point = struct {
@@ -34,7 +50,7 @@ pub fn loadLayer(allocator: std.mem.Allocator, file_path: []const u8) !ParsedLay
         Layer,
         allocator,
         contents,
-        .{ .ignore_unknown_fields = true },
+        .{ .ignore_unknown_fields = true, .allocate = .alloc_always },
     );
 }
 

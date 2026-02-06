@@ -21,8 +21,7 @@ pub fn main() !void {
     defer for (textures) |t| rl.UnloadTexture(t);
 
     const jsons = [_]map_loader.ParsedLayer{
-        try map_loader.loadLayer(allocator, "resources/json/z_indexes.json"),
-        try map_loader.loadLayer(allocator, "resources/json/edge.json"),
+        try map_loader.loadLayer(allocator, "resources/json/layers.json"),
     };
     defer for (jsons) |j| j.deinit();
 
@@ -80,6 +79,15 @@ pub fn main() !void {
     });
 
     for (jsons) |js| {
+        for (js.value.images) |img| {
+            if (img.index == 0) continue; // dont load backgorund
+            assert(0 <= img.index and img.index < textures.len);
+            _ = try world.spawn(.{
+                comps.Position{ .x = img.position.x, .y = img.position.y },
+                comps.WidthHeight{ .w = img.width, .h = img.height },
+                comps.Texture{ .index = img.index },
+            });
+        }
         for (js.value.polygons) |poly| {
             if (!std.mem.eql(u8, poly.name, "edge")) continue;
             var last = poly.vertices[0];
@@ -264,36 +272,106 @@ pub fn main() !void {
         rl.ClearBackground(rl.GRAY);
 
         rl.BeginMode2D(camera);
-        rl.DrawTexture(textures[0], 0, 0, rl.WHITE);
+
+        const Renderable = struct {
+            x: f32,
+            y: f32,
+            w: f32,
+            h: f32,
+            texture: rl.Texture,
+            flip_h: bool,
+        };
+        var to_render = try std.ArrayList(Renderable).initCapacity(allocator, 4);
+        defer to_render.deinit(allocator);
+        {
+            var it = world.query(&[_]type{ comps.Position, comps.WidthHeight, comps.Texture });
+            while (it.next()) |_| {
+                const pos = it.get(comps.PositionView);
+                const wh = it.get(comps.WidthHeightView);
+                const t = it.get(comps.TextureView);
+
+                try to_render.append(allocator, Renderable{
+                    .x = pos.x.*,
+                    .y = pos.y.*,
+                    .w = wh.w.*,
+                    .h = wh.h.*,
+                    .flip_h = false,
+                    .texture = textures[t.index.*],
+                });
+            }
+        }
         {
             var it = world.query(&[_]type{ comps.Position, comps.Model3D });
             while (it.next()) |_| {
                 const pos = it.get(comps.PositionView);
                 const model = it.get(comps.Model3DView);
                 const render_texture = render_textures[model.render_texture.*];
-                const src = rl.Rectangle{
-                    .x = 0,
-                    .y = 0,
-                    .width = @as(f32, @floatFromInt(render_texture.texture.width)),
-                    .height = -@as(f32, @floatFromInt(render_texture.texture.height)),
-                };
-                rl.DrawTextureRec(
-                    render_texture.texture,
-                    src,
-                    rl.Vector2{ .x = pos.x.* - src.width / 2, .y = pos.y.* + src.height / 2 },
-                    rl.WHITE,
-                );
+
+                const w = @as(f32, @floatFromInt(render_texture.texture.width));
+                const h = @as(f32, @floatFromInt(render_texture.texture.height));
+
+                try to_render.append(allocator, Renderable{
+                    .x = pos.x.* - h / 2.0,
+                    .y = pos.y.* - w / 2.0,
+                    .w = w,
+                    .h = h,
+                    .flip_h = true,
+                    .texture = render_texture.texture,
+                });
             }
         }
+        std.sort.insertion(Renderable, to_render.items, {}, struct {
+            fn lessThan(_: void, a: Renderable, b: Renderable) bool {
+                if (a.y + a.h < b.y + b.h) return true;
+                return false;
+            }
+        }.lessThan);
+        rl.DrawTexture(textures[0], 0, 0, rl.WHITE);
+        for (to_render.items) |r| {
+            const flip: f32 = if (r.flip_h) -1 else 1;
+            const src = rl.Rectangle{
+                .x = 0,
+                .y = 0,
+                .width = r.w,
+                .height = r.h * flip,
+            };
+            rl.DrawTextureRec(r.texture, src, .{ .x = r.x, .y = r.y }, rl.WHITE);
+
+            const from: rl.Vector2 = .{ .x = 0, .y = r.y + r.h };
+            const to: rl.Vector2 = .{ .x = 800.0, .y = r.y + r.h };
+            rl.DrawLineEx(from, to, 4.0, rl.RED);
+        }
+
+        // {
+        //     var it = world.query(&[_]type{ comps.Position, comps.Model3D });
+        //     while (it.next()) |_| {
+        //         const pos = it.get(comps.PositionView);
+        //         const model = it.get(comps.Model3DView);
+        //         const render_texture = render_textures[model.render_texture.*];
+        //         const src = rl.Rectangle{
+        //             .x = 0,
+        //             .y = 0,
+        //             .width = @as(f32, @floatFromInt(render_texture.texture.width)),
+        //             .height = -@as(f32, @floatFromInt(render_texture.texture.height)),
+        //         };
+        //         rl.DrawTextureRec(
+        //             render_texture.texture,
+        //             src,
+        //             rl.Vector2{ .x = pos.x.* - src.width / 2, .y = pos.y.* + src.height / 2 },
+        //             rl.WHITE,
+        //         );
+        //     }
+        // }
+
         // debug things.
-        {
-            // Draw edge lines
-            var it = world.query(&[_]type{ comps.Position, comps.Velocity });
-            while (it.next()) |_| {
-                const pos = it.get(comps.PositionView);
-                rl.DrawCircleV(.{ .x = pos.x.*, .y = pos.y.* }, 16.0, rl.RED);
-            }
-        }
+        // {
+        //     // Draw edge lines
+        //     var it = world.query(&[_]type{ comps.Position, comps.Velocity });
+        //     while (it.next()) |_| {
+        //         const pos = it.get(comps.PositionView);
+        //         rl.DrawCircleV(.{ .x = pos.x.*, .y = pos.y.* }, 16.0, rl.RED);
+        //     }
+        // }
         {
             // Draw edge lines
             var it = world.query(&[_]type{comps.Line});
@@ -322,8 +400,11 @@ fn unloadModelAnimations(items: []rl.ModelAnimation) void {
 }
 
 const std = @import("std");
+const debug = std.debug;
+const assert = debug.assert;
 const rl = @import("../rl.zig").rl;
 const rm = @import("../rl.zig").rm;
+
 const ecs = @import("../ecs.zig");
 const comps = @import("components.zig");
 const map_loader = @import("map_loader.zig");

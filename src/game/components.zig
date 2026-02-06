@@ -112,4 +112,16 @@ pub const LineView = struct {
     y1: *f32,
 };
 
+pub const WidthHeight = struct {
+    pub const cid = 10;
+    w: f32,
+    h: f32,
+};
+
+pub const WidthHeightView = struct {
+    pub const Of = WidthHeight;
+    w: *f32,
+    h: *f32,
+};
+
 const rl = @import("../rl.zig").rl;

@@ -9,11 +9,11 @@
     ],
     "fileStates": {
         "objects.tmj": {
-            "scale": 1.6126,
-            "selectedLayer": 2,
+            "scale": 1,
+            "selectedLayer": 0,
             "viewCenter": {
-                "x": 307.26776634007194,
-                "y": 513.4565298276076
+                "x": 53.5,
+                "y": 175
             }
         }
     },
@@ -26,6 +26,7 @@
         "objects.tmj"
     ],
     "project": "giggy.tiled-project",
+    "property.type": "int",
     "recentFiles": [
         "objects.tmj"
     ]

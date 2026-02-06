@@ -11,13 +11,82 @@
  "infinite":false,
  "layers":[
         {
+         "id":8,
+         "image":"..\/resources\/wall2.png",
+         "imageheight":374,
+         "imagewidth":1010,
+         "locked":true,
+         "name":"wall2",
+         "offsetx":0.757116898849176,
+         "offsety":579.951544518474,
+         "opacity":1,
+         "properties":[
+                {
+                 "name":"index",
+                 "type":"int",
+                 "value":3
+                }],
+         "type":"imagelayer",
+         "visible":true,
+         "x":0,
+         "y":0
+        }, 
+        {
+         "id":7,
+         "image":"..\/resources\/wall1.png",
+         "imageheight":242,
+         "imagewidth":108,
+         "locked":true,
+         "name":"wall1",
+         "offsetx":-0.0205935796486756,
+         "offsety":52.9049061175045,
+         "opacity":0,
+         "properties":[
+                {
+                 "name":"index",
+                 "type":"int",
+                 "value":2
+                }],
+         "type":"imagelayer",
+         "visible":true,
+         "x":0,
+         "y":0
+        }, 
+        {
+         "id":6,
+         "image":"..\/resources\/abol.png",
+         "imageheight":318,
+         "imagewidth":283,
+         "locked":true,
+         "name":"abol",
+         "offsetx":343,
+         "offsety":274,
+         "opacity":0,
+         "properties":[
+                {
+                 "name":"index",
+                 "type":"int",
+                 "value":1
+                }],
+         "type":"imagelayer",
+         "visible":true,
+         "x":0,
+         "y":0
+        }, 
+        {
          "id":2,
          "image":"..\/resources\/map.png",
          "imageheight":1024,
          "imagewidth":1024,
          "locked":true,
          "name":"background",
-         "opacity":1,
+         "opacity":0,
+         "properties":[
+                {
+                 "name":"index",
+                 "type":"int",
+                 "value":0
+                }],
          "type":"imagelayer",
          "visible":true,
          "x":0,
@@ -26,43 +95,40 @@
         {
          "draworder":"topdown",
          "id":3,
-         "name":"z_indexes",
+         "name":"banner",
          "objects":[
                 {
-                 "height":0,
-                 "id":1,
-                 "name":"wall1",
-                 "point":true,
-                 "rotation":0,
-                 "type":"",
-                 "visible":true,
-                 "width":0,
-                 "x":66.9202940833236,
-                 "y":262
-                }, 
-                {
-                 "height":0,
-                 "id":2,
-                 "name":"wall2",
-                 "point":true,
-                 "rotation":0,
-                 "type":"",
-                 "visible":true,
-                 "width":0,
-                 "x":486.367137355584,
-                 "y":988
-                }, 
-                {
-                 "height":0,
-                 "id":3,
+                 "height":315.639340195957,
+                 "id":6,
                  "name":"abol",
-                 "point":true,
                  "rotation":0,
                  "type":"",
                  "visible":true,
-                 "width":0,
-                 "x":498.874994748512,
-                 "y":480
+                 "width":280.912811608582,
+                 "x":343,
+                 "y":274
+                }, 
+                {
+                 "height":244.548758328286,
+                 "id":10,
+                 "name":"wall1",
+                 "rotation":0,
+                 "type":"",
+                 "visible":true,
+                 "width":110.539067231981,
+                 "x":0,
+                 "y":52.9981829194428
+                }, 
+                {
+                 "height":378,
+                 "id":11,
+                 "name":"wall2",
+                 "rotation":0,
+                 "type":"",
+                 "visible":true,
+                 "width":1008,
+                 "x":0,
+                 "y":576
                 }],
          "opacity":1,
          "type":"objectgroup",
@@ -213,8 +279,8 @@
          "x":0,
          "y":0
         }],
- "nextlayerid":6,
- "nextobjectid":6,
+ "nextlayerid":9,
+ "nextobjectid":14,
  "orientation":"orthogonal",
  "renderorder":"right-down",
  "tiledversion":"1.11.2",

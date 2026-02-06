@@ -1,10 +1,39 @@
 {
-  "name": "edge",
   "points": [],
+  "rectangles": [
+    {
+      "position": {
+        "x": 343.0,
+        "y": 274.0
+      },
+      "width": 280.912811608582,
+      "height": 315.639340195957,
+      "name": "abol",
+      "rotation": 0.0
+    },
+    {
+      "position": {
+        "x": 0.0,
+        "y": 52.9981829194428
+      },
+      "width": 110.539067231981,
+      "height": 244.548758328286,
+      "name": "wall1",
+      "rotation": 0.0
+    },
+    {
+      "position": {
+        "x": 0.0,
+        "y": 576.0
+      },
+      "width": 1008.0,
+      "height": 378.0,
+      "name": "wall2",
+      "rotation": 0.0
+    }
+  ],
   "polygons": [
     {
-      "name": "edge",
-      "closed": true,
       "vertices": [
         {
           "x": 0.0,
@@ -98,11 +127,12 @@
           "x": 138.28599776758,
           "y": 10.546942825251193
         }
-      ]
+      ],
+      "closed": true,
+      "name": "edge",
+      "rotation": 0.0
     },
     {
-      "name": "edge",
-      "closed": true,
       "vertices": [
         {
           "x": 306.957708049113,
@@ -120,7 +150,56 @@
           "x": 480.590350985985,
           "y": 635.619496465336
         }
-      ]
+      ],
+      "closed": true,
+      "name": "edge",
+      "rotation": 0.0
+    }
+  ],
+  "images": [
+    {
+      "name": "wall2",
+      "image": "../resources/wall2.png",
+      "position": {
+        "x": 0.757116898849176,
+        "y": 579.951544518474
+      },
+      "width": 1010.0,
+      "height": 374.0,
+      "index": 3
+    },
+    {
+      "name": "wall1",
+      "image": "../resources/wall1.png",
+      "position": {
+        "x": -0.0205935796486756,
+        "y": 52.9049061175045
+      },
+      "width": 108.0,
+      "height": 242.0,
+      "index": 2
+    },
+    {
+      "name": "abol",
+      "image": "../resources/abol.png",
+      "position": {
+        "x": 343.0,
+        "y": 274.0
+      },
+      "width": 283.0,
+      "height": 318.0,
+      "index": 1
+    },
+    {
+      "name": "background",
+      "image": "../resources/map.png",
+      "position": {
+        "x": 0.0,
+        "y": 0.0
+      },
+      "width": 1024.0,
+      "height": 1024.0,
+      "index": 0
     }
   ]
 }
