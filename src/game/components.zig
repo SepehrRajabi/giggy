@@ -86,4 +86,30 @@ pub const RotationView = struct {
     teta: *f32,
 };
 
+pub const Texture = struct {
+    pub const cid = 8;
+    index: usize,
+};
+
+pub const TextureView = struct {
+    pub const Of = Texture;
+    index: *usize,
+};
+
+pub const Line = struct {
+    pub const cid = 9;
+    x0: f32,
+    y0: f32,
+    x1: f32,
+    y1: f32,
+};
+
+pub const LineView = struct {
+    pub const Of = Line;
+    x0: *f32,
+    y0: *f32,
+    x1: *f32,
+    y1: *f32,
+};
+
 const rl = @import("../rl.zig").rl;

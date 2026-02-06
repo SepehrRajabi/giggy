@@ -3,10 +3,19 @@
         "height": 4300,
         "width": 2
     },
-    "activeFile": "",
+    "activeFile": "objects.tmj",
     "expandedProjectPaths": [
+        "."
     ],
     "fileStates": {
+        "objects.tmj": {
+            "scale": 1.6126,
+            "selectedLayer": 2,
+            "viewCenter": {
+                "x": 307.26776634007194,
+                "y": 513.4565298276076
+            }
+        }
     },
     "last.exportedFilePath": "/home/faramin/Developer/zig/giggy/tiled",
     "map.height": 32,
@@ -14,8 +23,10 @@
     "map.lastUsedFormat": "json",
     "map.width": 32,
     "openFiles": [
+        "objects.tmj"
     ],
     "project": "giggy.tiled-project",
     "recentFiles": [
+        "objects.tmj"
     ]
 }

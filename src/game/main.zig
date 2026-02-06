@@ -14,8 +14,17 @@ pub fn main() !void {
     // load resources
     const textures = [_]rl.Texture2D{
         rl.LoadTexture("resources/map.png"),
+        rl.LoadTexture("resources/abol.png"),
+        rl.LoadTexture("resources/wall1.png"),
+        rl.LoadTexture("resources/wall2.png"),
     };
     defer for (textures) |t| rl.UnloadTexture(t);
+
+    const jsons = [_]map_loader.ParsedLayer{
+        try map_loader.loadLayer(allocator, "resources/json/z_indexes.json"),
+        try map_loader.loadLayer(allocator, "resources/json/edge.json"),
+    };
+    defer for (jsons) |j| j.deinit();
 
     const models = [_]rl.Model{
         rl.LoadModel("resources/gltf/greenman.glb"),
@@ -42,6 +51,7 @@ pub fn main() !void {
     };
     defer for (render_textures) |r| rl.UnloadRenderTexture(r);
 
+    // setup camera
     var camera = rl.Camera2D{
         .offset = rl.Vector2{
             .x = @as(f32, @floatFromInt(screenWidth)) / 2.0,
@@ -59,8 +69,9 @@ pub fn main() !void {
         .projection = rl.CAMERA_ORTHOGRAPHIC,
     };
 
+    // init entities
     const player = try world.spawn(.{
-        comps.Position{ .x = 10, .y = 10 },
+        comps.Position{ .x = 70, .y = 70 },
         comps.Velocity{ .x = 0, .y = 0 },
         comps.Rotation{ .teta = 0 },
         comps.Model3D{ .index = 0, .render_texture = 0, .mesh = 0, .material = 1 },
@@ -68,6 +79,36 @@ pub fn main() !void {
         comps.MoveAnimation{ .idle = 0, .run = 2 },
     });
 
+    for (jsons) |js| {
+        for (js.value.polygons) |poly| {
+            if (!std.mem.eql(u8, poly.name, "edge")) continue;
+            var last = poly.vertices[0];
+            for (poly.vertices[1..]) |v| {
+                _ = try world.spawn(.{
+                    comps.Line{
+                        .x0 = last.x,
+                        .y0 = last.y,
+                        .x1 = v.x,
+                        .y1 = v.y,
+                    },
+                });
+                last.x = v.x;
+                last.y = v.y;
+            }
+            if (poly.closed) {
+                _ = try world.spawn(.{
+                    comps.Line{
+                        .x0 = last.x,
+                        .y0 = last.y,
+                        .x1 = poly.vertices[0].x,
+                        .y1 = poly.vertices[0].y,
+                    },
+                });
+            }
+        }
+    }
+
+    // main loop
     while (!rl.WindowShouldClose()) {
         const dt = rl.GetFrameTime();
         {
@@ -107,6 +148,26 @@ pub fn main() !void {
             while (it.next()) |_| {
                 const pos = it.get(comps.PositionView);
                 const vel = it.get(comps.VelocityView);
+
+                const new_x = pos.x.* + dt * vel.x.*;
+                const new_y = pos.y.* + dt * vel.y.*;
+
+                var edge_it = world.query(&[_]type{comps.Line});
+                var blocked = false;
+                while (edge_it.next()) |_| {
+                    const line = edge_it.get(comps.LineView);
+                    if (rl.CheckCollisionCircleLine(
+                        .{ .x = new_x, .y = new_y },
+                        16.0,
+                        .{ .x = line.x0.*, .y = line.y0.* },
+                        .{ .x = line.x1.*, .y = line.y1.* },
+                    )) {
+                        blocked = true;
+                        break;
+                    }
+                }
+
+                if (blocked) continue;
                 pos.x.* += dt * vel.x.*;
                 pos.y.* += dt * vel.y.*;
             }
@@ -219,9 +280,28 @@ pub fn main() !void {
                 rl.DrawTextureRec(
                     render_texture.texture,
                     src,
-                    rl.Vector2{ .x = pos.x.*, .y = pos.y.* },
+                    rl.Vector2{ .x = pos.x.* - src.width / 2, .y = pos.y.* + src.height / 2 },
                     rl.WHITE,
                 );
+            }
+        }
+        // debug things.
+        {
+            // Draw edge lines
+            var it = world.query(&[_]type{ comps.Position, comps.Velocity });
+            while (it.next()) |_| {
+                const pos = it.get(comps.PositionView);
+                rl.DrawCircleV(.{ .x = pos.x.*, .y = pos.y.* }, 16.0, rl.RED);
+            }
+        }
+        {
+            // Draw edge lines
+            var it = world.query(&[_]type{comps.Line});
+            while (it.next()) |_| {
+                const line = it.get(comps.LineView);
+                const from: rl.Vector2 = .{ .x = line.x0.*, .y = line.y0.* };
+                const to: rl.Vector2 = .{ .x = line.x1.*, .y = line.y1.* };
+                rl.DrawLineEx(from, to, 4.0, rl.GREEN);
             }
         }
         rl.EndMode2D();
@@ -246,3 +326,4 @@ const rl = @import("../rl.zig").rl;
 const rm = @import("../rl.zig").rm;
 const ecs = @import("../ecs.zig");
 const comps = @import("components.zig");
+const map_loader = @import("map_loader.zig");

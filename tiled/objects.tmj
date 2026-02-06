@@ -1,4 +1,12 @@
 { "compressionlevel":-1,
+ "editorsettings":
+    {
+     "export":
+        {
+         "format":"json",
+         "target":"objects.json"
+        }
+    },
  "height":32,
  "infinite":false,
  "layers":[
@@ -170,6 +178,34 @@
                  "width":0,
                  "x":0,
                  "y":80
+                }, 
+                {
+                 "height":0,
+                 "id":5,
+                 "name":"edge",
+                 "polygon":[
+                        {
+                         "x":0,
+                         "y":0
+                        }, 
+                        {
+                         "x":201.537889123155,
+                         "y":-109.140518417462
+                        }, 
+                        {
+                         "x":363.388317003597,
+                         "y":-4.34081607342182
+                        }, 
+                        {
+                         "x":173.632642936872,
+                         "y":122.162966637728
+                        }],
+                 "rotation":0,
+                 "type":"",
+                 "visible":true,
+                 "width":0,
+                 "x":306.957708049113,
+                 "y":513.456529827608
                 }],
          "opacity":1,
          "type":"objectgroup",
@@ -178,7 +214,7 @@
          "y":0
         }],
  "nextlayerid":6,
- "nextobjectid":5,
+ "nextobjectid":6,
  "orientation":"orthogonal",
  "renderorder":"right-down",
  "tiledversion":"1.11.2",
