@@ -52,20 +52,15 @@ pub fn main() !void {
         .rotation = 0.0,
         .zoom = 1.0,
     };
-    const camera3d = rl.Camera3D{
-        .position = .{ .x = 3.0, .y = 3.0, .z = 3.0 },
-        .target = .{ .x = 0.0, .y = 1.0, .z = 0.0 },
-        .up = .{ .x = 0.0, .y = 1.0, .z = 0.0 },
-        .fovy = 3.0,
-        .projection = rl.CAMERA_ORTHOGRAPHIC,
-    };
 
+    _ = try resc.loadRenderTexture("player", 64, 64);
     // init entities
     const player = try world.spawn(.{
         comps.Position{ .x = 70, .y = 70 },
         comps.Velocity{ .x = 0, .y = 0 },
         comps.Rotation{ .teta = 0 },
         comps.Model3D{ .name = "greenman", .render_texture = 0, .mesh = 0, .material = 1 },
+        comps.RenderInto{ .into = "player" },
         comps.Animation{ .index = 0, .frame = 0 },
         comps.MoveAnimation{ .idle = 0, .run = 2 },
     });
@@ -113,7 +108,8 @@ pub fn main() !void {
     // main loop
     while (!rl.WindowShouldClose()) {
         const dt = rl.GetFrameTime();
-        const ctx = ecs.SystemCtx{
+        const ctx = SystemCtx{
+            .resc = &resc,
             .world = &world,
             .cb = &command_buffer,
             .dt = dt,
@@ -121,73 +117,10 @@ pub fn main() !void {
 
         systems.playerInput(ctx, player);
         systems.updatePositions(ctx);
-        {
-            // update camera target
-            const player_pos = world.get(comps.PositionView, player).?;
-
-            const w = @as(f32, @floatFromInt(Resources.screenWidth));
-            const h = @as(f32, @floatFromInt(Resources.screenHeight));
-
-            const map = resc.textures.getPtr("map").?;
-
-            var x = player_pos.x.*;
-            const min_x = w / 2.0;
-            const max_x = @as(f32, @floatFromInt(map.width)) - w / 2.0;
-            x = @max(x, min_x);
-            x = @min(x, max_x);
-
-            var y = player_pos.y.*;
-            const min_y = h / (2.0);
-            const max_y = @as(f32, @floatFromInt(map.height)) - h / 2.0;
-            y = @max(y, min_y);
-            y = @min(y, max_y);
-
-            camera.target = .{ .x = x, .y = y };
-        }
+        systems.cameraOnObject(ctx, &camera, player);
         systems.animateMovingObjects(ctx);
-        {
-            // 3d model animations
-            var it = world.query(&[_]type{ comps.Model3D, comps.Animation });
-            while (it.next()) |_| {
-                const mv = it.get(comps.Model3DView);
-                const am = it.get(comps.AnimationView);
-
-                const model = resc.models.getPtr(mv.name.*).?;
-                const frame_count = @as(usize, @intCast(model.animations[am.index.*].frameCount));
-                const new_current = (am.frame.* + 1) % frame_count;
-                am.frame.* = new_current;
-                rl.UpdateModelAnimationBones(
-                    model.model,
-                    model.animations[am.index.*],
-                    @intCast(new_current),
-                );
-            }
-        }
-        {
-            // render 3ds
-            var it = world.query(&[_]type{ comps.Model3D, comps.Rotation });
-            while (it.next()) |_| {
-                const mv = it.get(comps.Model3DView);
-                const rv = it.get(comps.RotationView);
-
-                const model = resc.models.getPtr(mv.name.*).?;
-
-                rl.BeginTextureMode(render_textures[mv.render_texture.*]);
-                rl.ClearBackground(rl.BLANK);
-                rl.BeginMode3D(camera3d);
-                rl.DrawModelEx(
-                    model.model,
-                    rl.Vector3{ .x = 0, .y = 0, .z = 0 },
-                    rl.Vector3{ .x = 0, .y = 1, .z = 0 }, // rotate around Y
-                    rv.teta.*,
-                    rl.Vector3{ .x = 1, .y = 1, .z = 1 },
-                    rl.WHITE,
-                );
-                // rl.DrawGrid(10, 1.0);
-                rl.EndMode3D();
-                rl.EndTextureMode();
-            }
-        }
+        systems.upldate3dModelAnimations(ctx);
+        systems.render3dModels(ctx);
 
         // render main scene
         rl.BeginDrawing();

@@ -122,4 +122,14 @@ pub const WidthHeightView = struct {
     h: *f32,
 };
 
+pub const RenderInto = struct {
+    pub const cid = 11;
+    into: []const u8,
+};
+
+pub const RenderIntoView = struct {
+    pub const Of = RenderInto;
+    into: *[]const u8,
+};
+
 const rl = @import("../rl.zig").rl;

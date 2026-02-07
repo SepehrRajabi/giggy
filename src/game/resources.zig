@@ -2,6 +2,7 @@ pub const screenWidth: u32 = 800;
 pub const screenHeight: u32 = 600;
 
 textures: std.StringHashMap(rl.Texture2D),
+render_textures: std.StringHashMap(rl.RenderTexture),
 models: std.StringHashMap(Model),
 shaders: std.StringHashMap(rl.Shader),
 jsons: std.StringHashMap(map_loader.ParsedLayer),
@@ -12,6 +13,7 @@ const Self = @This();
 pub fn init(gpa: mem.Allocator) !Self {
     return Self{
         .textures = std.StringHashMap(rl.Texture2D).init(gpa),
+        .render_textures = std.StringHashMap(rl.RenderTexture).init(gpa),
         .models = std.StringHashMap(Model).init(gpa),
         .shaders = std.StringHashMap(rl.Shader).init(gpa),
         .jsons = std.StringHashMap(map_loader.ParsedLayer).init(gpa),
@@ -52,6 +54,18 @@ pub fn unloadTexture(self: *Self, key: []const u8) bool {
     const ptr = self.textures.getPtr(key) orelse return false;
     rl.UnloadTexture(ptr.*);
     return self.textures.remove(key);
+}
+
+pub fn loadRenderTexture(self: *Self, key: []const u8, width: c_int, height: c_int) !*rl.RenderTexture {
+    const texture = rl.LoadRenderTexture(width, height);
+    try self.render_textures.put(key, texture);
+    return self.render_textures.getPtr(key).?;
+}
+
+pub fn unloadRenderTexture(self: *Self, key: []const u8) bool {
+    const ptr = self.render_textures.getPtr(key) orelse return false;
+    rl.UnloadRenderTexture(ptr.*);
+    return self.render_textures.remove(key);
 }
 
 pub fn loadModel(self: *Self, key: []const u8, filename: [:0]const u8) !*Model {
