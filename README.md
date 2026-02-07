@@ -12,9 +12,8 @@ This ECS uses:
 ---
 
 ## Setup project
-
+If you do not have raylib installed, which you can do by taking a look at [raylib-supported-platforms](https://www.raylib.com/#supported-platforms), then run:
 ```bash
-
 REPO=$PWD
 mkdir -p ./{dep,include,lib}
 
@@ -30,9 +29,13 @@ cp *.h $REPO/include/
 # now build project
 cd $REPO
 zig build run
-
 ```
 
+Otherwise you can just run:
+
+```bash
+zig build run
+```
 
 ---
 
