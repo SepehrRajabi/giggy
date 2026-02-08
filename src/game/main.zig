@@ -6,6 +6,7 @@ pub const SystemCtx = struct {
     world: *ecs.World,
     cb: *ecs.CommandBuffer,
     dt: f32,
+    alpha: f32,
 };
 
 pub fn main() !void {
@@ -53,9 +54,9 @@ pub fn main() !void {
 
     // init entities
     const player = try world.spawn(.{
-        comps.Position{ .x = 70, .y = 70 },
+        comps.Position{ .x = 70, .y = 70, .prev_x = 70, .prev_y = 70 },
         comps.Velocity{ .x = 0, .y = 0 },
-        comps.Rotation{ .teta = 0 },
+        comps.Rotation{ .teta = 0, .prev_teta = 0, .target_teta = 0, .turn_speed_deg = 360.0 * 3 },
         comps.Model3D{ .name = "greenman", .render_texture = 0, .mesh = 0, .material = 1 },
         comps.RenderInto{ .into = "player" },
         comps.Animation{ .index = 0, .frame = 0, .acc = 0, .speed = 0 },
@@ -67,7 +68,12 @@ pub fn main() !void {
         if (img.index == 0) continue; // dont load backgorund
         assert(resc.textures.getPtr(img.name) != null);
         _ = try world.spawn(.{
-            comps.Position{ .x = img.position.x, .y = img.position.y },
+            comps.Position{
+                .x = img.position.x,
+                .y = img.position.y,
+                .prev_x = img.position.x,
+                .prev_y = img.position.y,
+            },
             comps.WidthHeight{ .w = img.width, .h = img.height },
             comps.Texture{ .name = img.name },
         });
@@ -115,6 +121,7 @@ pub fn main() !void {
             .world = &world,
             .cb = &command_buffer,
             .dt = frame_dt,
+            .alpha = 0,
         };
         systems.playerInput(frame_ctx, player);
         const debug = systems.updateDebugMode(frame_ctx);
@@ -125,31 +132,44 @@ pub fn main() !void {
                 .world = &world,
                 .cb = &command_buffer,
                 .dt = fixed_dt,
+                .alpha = 0,
             };
             systems.updatePositions(sim_ctx);
+            systems.updateRotations(sim_ctx);
             systems.playMovingsAnim(sim_ctx);
         }
 
-        systems.cameraOnObject(frame_ctx, &camera, player);
-        systems.upldate3dModelAnimations(frame_ctx);
-        systems.render3dModels(frame_ctx);
+        const alpha = @min(@max(accumulator / fixed_dt, 0), 1);
+        const render_ctx = SystemCtx{
+            .resc = &resc,
+            .world = &world,
+            .cb = &command_buffer,
+            .dt = frame_dt,
+            .alpha = alpha,
+        };
+
+        systems.cameraOnObject(render_ctx, &camera, player);
+        systems.upldate3dModelAnimations(render_ctx);
+        systems.render3dModels(render_ctx);
 
         rl.BeginDrawing();
         rl.ClearBackground(rl.GRAY);
         rl.BeginMode2D(camera);
         // render main scene
-        systems.renderBackground(frame_ctx, "map");
-        try systems.collectRenderables(frame_ctx, allocator, &to_render);
-        systems.renderRenderables(frame_ctx, &to_render);
-        to_render.items.len = 0;
+        systems.renderBackground(render_ctx, "map");
+        try systems.collectRenderables(render_ctx, allocator, &to_render);
+        systems.renderRenderables(render_ctx, &to_render);
+        to_render.clearRetainingCapacity();
         if (debug) {
-            systems.renderBoxes(frame_ctx);
-            systems.renderColliders(frame_ctx);
+            systems.renderBoxes(render_ctx);
+            systems.renderColliders(render_ctx);
         }
         rl.EndMode2D();
         // render gui
         if (debug) rl.DrawFPS(10, screenHeight - 30);
         rl.EndDrawing();
+
+        try command_buffer.flush(&world);
     }
 }
 

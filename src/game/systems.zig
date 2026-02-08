@@ -24,7 +24,7 @@ pub fn playerInput(ctx: SystemCtx, player: ecs.Entity) void {
         y = y / l * 250.0;
 
         const angle = std.math.atan2(y, -x);
-        rot.teta.* = std.math.radiansToDegrees(angle) - 45.0;
+        rot.target_teta.* = std.math.radiansToDegrees(angle) - 45.0;
     }
     vel.x.* = x;
     vel.y.* = y;
@@ -36,6 +36,9 @@ pub fn updatePositions(ctx: SystemCtx) void {
         const pos = it.get(comps.PositionView);
         const vel = it.get(comps.VelocityView);
 
+        pos.prev_x.* = pos.x.*;
+        pos.prev_y.* = pos.y.*;
+
         const new_x = pos.x.* + ctx.dt * vel.x.*;
         const new_y = pos.y.* + ctx.dt * vel.y.*;
 
@@ -43,6 +46,21 @@ pub fn updatePositions(ctx: SystemCtx) void {
 
         pos.x.* = new_x;
         pos.y.* = new_y;
+    }
+}
+
+pub fn updateRotations(ctx: SystemCtx) void {
+    var it = ctx.world.query(&[_]type{comps.Rotation});
+    while (it.next()) |_| {
+        const rot = it.get(comps.RotationView);
+
+        rot.prev_teta.* = rot.teta.*;
+
+        var delta = wrapAngleDeg(rot.target_teta.* - rot.teta.*);
+        const max_step = rot.turn_speed_deg.* * ctx.dt;
+        if (delta > max_step) delta = max_step;
+        if (delta < -max_step) delta = -max_step;
+        rot.teta.* += delta;
     }
 }
 
@@ -88,13 +106,13 @@ pub fn cameraOnObject(ctx: SystemCtx, camera: *rl.Camera2D, object: ecs.Entity) 
 
     const map = ctx.resc.textures.getPtr("map").?;
 
-    var x = player_pos.x.*;
+    var x = lerp(player_pos.prev_x.*, player_pos.x.*, ctx.alpha);
     const min_x = w / 2.0;
     const max_x = @as(f32, @floatFromInt(map.width)) - w / 2.0;
     x = @max(x, min_x);
     x = @min(x, max_x);
 
-    var y = player_pos.y.*;
+    var y = lerp(player_pos.prev_y.*, player_pos.y.*, ctx.alpha);
     const min_y = h / (2.0);
     const max_y = @as(f32, @floatFromInt(map.height)) - h / 2.0;
     y = @max(y, min_y);
@@ -127,11 +145,17 @@ pub fn upldate3dModelAnimations(ctx: SystemCtx) void {
 }
 
 pub fn render3dModels(ctx: SystemCtx) void {
-    var it = ctx.world.query(&[_]type{ comps.Model3D, comps.Rotation, comps.RenderInto });
+    var it = ctx.world.query(&[_]type{
+        comps.Model3D,
+        comps.Rotation,
+        comps.RenderInto,
+    });
     while (it.next()) |_| {
         const mv = it.get(comps.Model3DView);
         const rv = it.get(comps.RotationView);
         const into = it.getAuto(comps.RenderInto).into;
+
+        const rotation = lerpAngleDeg(rv.prev_teta.*, rv.teta.*, ctx.alpha);
 
         const model = ctx.resc.models.getPtr(mv.name.*).?;
         const render_texture = ctx.resc.render_textures.get(into.*).?;
@@ -143,7 +167,7 @@ pub fn render3dModels(ctx: SystemCtx) void {
             model.model,
             rl.Vector3{ .x = 0, .y = 0, .z = 0 },
             rl.Vector3{ .x = 0, .y = 1, .z = 0 }, // rotate around Y
-            rv.teta.*,
+            rotation,
             rl.Vector3{ .x = 1, .y = 1, .z = 1 },
             rl.WHITE,
         );
@@ -168,8 +192,8 @@ pub fn collectRenderables(ctx: SystemCtx, gpa: mem.Allocator, list: *RenderableL
         const texture = ctx.resc.textures.getPtr(t.name.*).?;
 
         try list.append(gpa, Renderable{
-            .x = pos.x.*,
-            .y = pos.y.*,
+            .x = lerp(pos.prev_x.*, pos.x.*, ctx.alpha),
+            .y = lerp(pos.prev_y.*, pos.y.*, ctx.alpha),
             .w = wh.w.*,
             .h = wh.h.*,
             .flip_h = false,
@@ -186,8 +210,8 @@ pub fn collectRenderables(ctx: SystemCtx, gpa: mem.Allocator, list: *RenderableL
         const h = @as(f32, @floatFromInt(render_texture.texture.height));
 
         try list.append(gpa, Renderable{
-            .x = pos.x.* - h / 2.0,
-            .y = pos.y.* - w / 2.0,
+            .x = lerp(pos.prev_x.*, pos.x.*, ctx.alpha) - h / 2.0,
+            .y = lerp(pos.prev_y.*, pos.y.*, ctx.alpha) - w / 2.0,
             .w = w,
             .h = h,
             .flip_h = true,
@@ -228,9 +252,11 @@ pub fn renderBoxes(ctx: SystemCtx) void {
         const pos = it_texture.get(comps.PositionView);
         const texture_name = it_texture.getAuto(comps.Texture).name;
         const texture = ctx.resc.textures.get(texture_name.*).?;
+        const x = lerp(pos.prev_x.*, pos.x.*, ctx.alpha);
+        const y = lerp(pos.prev_y.*, pos.y.*, ctx.alpha);
         rl.DrawRectangleLinesEx(rl.Rectangle{
-            .x = pos.x.*,
-            .y = pos.y.*,
+            .x = x,
+            .y = y,
             .width = @floatFromInt(texture.width),
             .height = @floatFromInt(texture.height),
         }, 4.0, rl.RED);
@@ -242,9 +268,11 @@ pub fn renderBoxes(ctx: SystemCtx) void {
         const render_texture = ctx.resc.render_textures.get(into.*).?;
         const w: f32 = @floatFromInt(render_texture.texture.width);
         const h: f32 = @floatFromInt(render_texture.texture.height);
+        const x = lerp(pos.prev_x.*, pos.x.*, ctx.alpha);
+        const y = lerp(pos.prev_y.*, pos.y.*, ctx.alpha);
         rl.DrawRectangleLinesEx(rl.Rectangle{
-            .x = pos.x.* - w / 2.0,
-            .y = pos.y.* - h / 2.0,
+            .x = x - w / 2.0,
+            .y = y - h / 2.0,
             .width = w,
             .height = h,
         }, 4.0, rl.RED);
@@ -292,3 +320,18 @@ const ecs = @import("../ecs.zig");
 const comps = @import("components.zig");
 const Rescources = @import("resources.zig");
 const SystemCtx = @import("main.zig").SystemCtx;
+
+fn lerp(a: f32, b: f32, t: f32) f32 {
+    return a + (b - a) * t;
+}
+
+fn wrapAngleDeg(angle: f32) f32 {
+    var a = angle;
+    while (a > 180.0) a -= 360.0;
+    while (a < -180.0) a += 360.0;
+    return a;
+}
+
+fn lerpAngleDeg(a: f32, b: f32, t: f32) f32 {
+    return a + wrapAngleDeg(b - a) * t;
+}
