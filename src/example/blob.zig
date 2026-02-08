@@ -1,17 +1,14 @@
 const Position = struct {
-    pub const cid = 1;
     x: f32,
     y: f32,
 };
 
 const Velocity = struct {
-    pub const cid = 2;
     dx: f32,
     dy: f32,
 };
 
 const Radius = struct {
-    pub const cid = 3;
     value: f32,
 };
 
@@ -67,7 +64,7 @@ pub fn main() !void {
         .factor = 0.8,
     };
 
-    for (0..256) |i| {
+    for (0..2048) |i| {
         const pos = Position{
             .x = 100.0 + 100.0 * @as(f32, @floatFromInt(i)),
             .y = 200.0,

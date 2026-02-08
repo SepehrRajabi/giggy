@@ -11,3 +11,12 @@ pub const Archetype = archetype.Archetype;
 pub const Entity = archetype.Entity;
 pub const CommandBuffer = command_buffer.CommandBuffer;
 pub const World = world.World;
+
+test {
+    _ = util;
+    _ = field;
+    _ = multi_field;
+    _ = archetype;
+    _ = world;
+    _ = command_buffer;
+}

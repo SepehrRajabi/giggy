@@ -11,10 +11,9 @@ pub const MultiField = struct {
         pub inline fn from(comptime T: type) *const Meta {
             return &struct {
                 pub const v: Meta = meta_blk: {
+                    util.assertComponent(T);
+                    const cid = util.cidOf(T);
                     const ti = @typeInfo(T);
-                    assert(ti == .@"struct");
-                    assert(@hasDecl(T, "cid"));
-                    const cid = T.cid;
                     const l = ti.@"struct".fields.len;
                     const fs = fs_blk: {
                         var tmp: [l]Field.Meta = undefined;
@@ -27,10 +26,10 @@ pub const MultiField = struct {
         }
 
         pub fn extractRaw(self: *const Meta, comptime T: type, value: *const T, out: [][]const u8) void {
+            comptime util.assertComponent(T);
+            const cid = comptime util.cidOf(T);
             const ti = @typeInfo(T);
-            assert(ti == .@"struct");
-            assert(@hasDecl(T, "cid"));
-            assert(T.cid == self.cid);
+            assert(cid == self.cid);
             const fields = ti.@"struct".fields;
             assert(fields.len == self.fields.len);
 
@@ -43,10 +42,10 @@ pub const MultiField = struct {
         }
 
         pub inline fn extractBytes(self: *const Meta, comptime T: type, value: *const T, out: []u8) void {
+            comptime util.assertComponent(T);
+            const cid = comptime util.cidOf(T);
+            assert(cid == self.cid);
             const ti = @typeInfo(T);
-            assert(ti == .@"struct");
-            assert(@hasDecl(T, "cid"));
-            assert(T.cid == self.cid);
             const fields = ti.@"struct".fields;
             assert(fields.len == self.fields.len);
 
@@ -159,7 +158,7 @@ pub const MultiField = struct {
 
 test "MultiField.Meta.from" {
     const C1 = struct {
-        const cid = 1;
+        pub const cid = 1;
         x: u32,
         y: u32,
     };
@@ -174,14 +173,13 @@ test "MultiField.Meta.from" {
         MultiField.Meta.from(C1).*,
     );
     const C2 = struct {
-        const cid = 2;
         a: u8,
         b: u32,
         c: u16,
     };
     try testing.expectEqualDeep(
         MultiField.Meta{
-            .cid = 2,
+            .cid = util.hashTypeName(C2),
             .fields = ([_]Field.Meta{
                 Field.Meta{ .index = 0, .name = "a", .size = 1, .alignment = 1 },
                 Field.Meta{ .index = 1, .name = "b", .size = 4, .alignment = 4 },
@@ -194,7 +192,6 @@ test "MultiField.Meta.from" {
 
 test "MultiField.Meta.extract" {
     const C = struct {
-        const cid = 1;
         x: u32,
         y: u32,
     };
@@ -216,7 +213,6 @@ test "MultiField.Meta.extract" {
 
 test "MultiField.Meta.extractBytes" {
     const C = struct {
-        const cid = 1;
         x: u32,
         y: u16,
         z: u8,
@@ -242,7 +238,6 @@ test "MultiField.Meta.extractBytes" {
 test "MultiField.appendRaw" {
     const alloc = testing.allocator;
     const C = struct {
-        const cid = 1;
         x: u32,
         y: u32,
     };
@@ -267,7 +262,6 @@ test "MultiField.appendRaw" {
 test "MultiField.appendBytes" {
     const alloc = testing.allocator;
     const C = struct {
-        pub const cid = 1;
         x: u32,
         y: u16,
         z: u8,
@@ -303,7 +297,6 @@ test "MultiField.appendBytes" {
 test "MultiField.append" {
     const alloc = testing.allocator;
     const C = struct {
-        pub const cid = 1;
         x: u32,
         y: u32,
     };
@@ -330,4 +323,5 @@ const mem = std.mem;
 const testing = std.testing;
 const assert = std.debug.assert;
 
+const util = @import("util.zig");
 const Field = @import("field.zig").Field;

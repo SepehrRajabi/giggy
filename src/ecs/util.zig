@@ -28,10 +28,27 @@ pub fn typesOfBundle(comptime Bundle: type) []type {
     return out[0..];
 }
 
-pub fn isComponent(T: type) bool {
+pub fn cidOf(comptime T: type) u32 {
+    assertComponent(T);
+    if (@hasDecl(T, "cid"))
+        return T.cid;
+    return hashTypeName(T);
+}
+
+pub fn hashTypeName(comptime T: type) u32 {
+    const name = @typeName(T);
+    var hasher = std.hash.Wyhash.init(0);
+    hasher.update(name[0..]);
+    return @truncate(hasher.final());
+}
+
+pub fn assertComponent(comptime T: type) void {
+    comptime if (!isComponent(T)) @compileError("component is expected to be struct");
+}
+
+pub fn isComponent(comptime T: type) bool {
     const ti = @typeInfo(T);
-    if (ti != .@"struct") return false;
-    return @hasDecl(T, "cid");
+    return ti == .@"struct";
 }
 
 test isComponent {
@@ -44,10 +61,10 @@ test isComponent {
         x: u32,
         y: u32,
     }));
-    try testing.expectEqual(false, isComponent(u8));
-    try testing.expectEqual(false, isComponent(struct {
+    try testing.expectEqual(true, isComponent(struct {
         foo: f32,
     }));
+    try testing.expectEqual(false, isComponent(u8));
 }
 
 pub fn isBundle(comptime Bundle: type) bool {

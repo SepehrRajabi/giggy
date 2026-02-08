@@ -191,10 +191,10 @@ pub const Archetype = struct {
                     var tmp: [fields.len]Entry = undefined;
                     for (fields, 0..) |f, i| {
                         const T = f.type;
-                        if (!@hasDecl(T, "cid"))
-                            @compileError("Bundle fields should be components");
+                        util.assertComponent(T);
+                        const cid = util.cidOf(T);
                         tmp[i] = .{
-                            .cid = T.cid,
+                            .cid = cid,
                             .offset = @offsetOf(Bundle, f.name),
                             .T = T,
                         };
@@ -223,9 +223,9 @@ pub const Archetype = struct {
             pub fn hasComponents(self: *const MetaSelf, comptime Comps: []const type) bool {
                 var cids: [Comps.len]u32 = undefined;
                 inline for (Comps, 0..) |C, i| {
-                    if (!@hasDecl(C, "cid"))
-                        @compileError("Comps should be component");
-                    cids[i] = C.cid;
+                    comptime util.assertComponent(C);
+                    const cid = comptime util.cidOf(C);
+                    cids[i] = cid;
                 }
                 return self.hasCIDs(cids[0..]);
             }
@@ -333,8 +333,9 @@ pub const Archetype = struct {
         var cid_indexes: [fields.len]usize = undefined;
         inline for (fields, 0..) |f, i| {
             const T = f.type;
-            assert(@hasDecl(T, "cid"));
-            cid_indexes[i] = self.indexOfCID(T.cid) orelse unreachable;
+            comptime util.assertComponent(T);
+            const cid = comptime util.cidOf(T);
+            cid_indexes[i] = self.indexOfCID(cid) orelse unreachable;
         }
 
         // check for duplication
@@ -445,10 +446,10 @@ pub const Archetype = struct {
         if (comp_ti != .@"struct")
             @compileError("View.Of should be a struct");
         const comp_fields = comp_ti.@"struct".fields;
-        if (!@hasDecl(Of, "cid"))
-            @compileError("View.Of is not component");
+        comptime util.assertComponent(Of);
+        const of_cid = comptime util.cidOf(Of);
 
-        const comp = self.components[self.indexOfCID(Of.cid) orelse unreachable];
+        const comp = self.components[self.indexOfCID(of_cid) orelse unreachable];
         assert(comp_fields.len == comp.fields.len);
 
         var out: View = undefined;
@@ -467,9 +468,9 @@ pub const Archetype = struct {
         const ti = @typeInfo(C);
         if (ti != .@"struct")
             @compileError("component should be a struct");
-        if (!@hasDecl(C, "cid"))
-            @compileError("type T should be a component");
-        const comp = self.components[self.indexOfCID(C.cid) orelse unreachable];
+        comptime util.assertComponent(C);
+        const cid = comptime util.cidOf(C);
+        const comp = self.components[self.indexOfCID(cid) orelse unreachable];
 
         var out: util.ViewOf(C) = undefined;
         inline for (ti.@"struct".fields, 0..) |f, i| {

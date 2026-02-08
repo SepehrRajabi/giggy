@@ -322,9 +322,9 @@ pub const World = struct {
             // generate a static array of cids
             var tmp: [Comps.len]u32 = undefined;
             for (Comps, 0..) |C, i| {
-                if (!@hasDecl(C, "cid"))
-                    @compileError("Comps should be component");
-                tmp[i] = C.cid;
+                util.assertComponent(C);
+                const cid = util.cidOf(C);
+                tmp[i] = cid;
             }
             break :blk tmp;
         };
@@ -368,14 +368,11 @@ pub const World = struct {
             if (!@hasDecl(View, "Of"))
                 @compileError("View should declare 'Of'");
             const Of = View.Of;
-            const comp_ti = @typeInfo(Of);
-            if (comp_ti != .@"struct")
-                @compileError("View.Of should be a struct");
-            if (!@hasDecl(Of, "cid"))
-                @compileError("View.Of is not component");
+            comptime util.assertComponent(Of);
+            const of_cid = comptime util.cidOf(Of);
 
-            const found = for (self.cids) |cid| {
-                if (cid == Of.cid) break true;
+            const found = for (self.cids) |c| {
+                if (c == of_cid) break true;
             } else false;
             assert(found);
 
@@ -383,14 +380,11 @@ pub const World = struct {
         }
 
         pub fn getAuto(self: *const QueryIterator, comptime T: type) util.ViewOf(T) {
-            const ti = @typeInfo(T);
-            if (ti != .@"struct")
-                @compileError("T should be a struct");
-            if (!@hasDecl(T, "cid"))
-                @compileError("T should be a component");
+            comptime util.assertComponent(T);
+            const cid = comptime util.cidOf(T);
 
-            const found = for (self.cids) |cid| {
-                if (cid == T.cid) break true;
+            const found = for (self.cids) |c| {
+                if (c == cid) break true;
             } else false;
             assert(found);
 
@@ -401,7 +395,6 @@ pub const World = struct {
 
 test "World.{spawn,despawn,get}" {
     const Position = struct {
-        pub const cid = 1;
         x: u32,
         y: u32,
     };
@@ -411,7 +404,6 @@ test "World.{spawn,despawn,get}" {
         y: *u32,
     };
     const Velocity = struct {
-        pub const cid = 2;
         x: u32,
         y: u32,
     };
@@ -493,7 +485,6 @@ test "World.{spawn,despawn,get}" {
 
 test "World.QueryIterator" {
     const Position = struct {
-        pub const cid = 1;
         x: u32,
         y: u32,
     };
@@ -503,7 +494,6 @@ test "World.QueryIterator" {
         y: *u32,
     };
     const Velocity = struct {
-        pub const cid = 2;
         x: u32,
         y: u32,
     };
@@ -618,7 +608,6 @@ test "World.QueryIterator" {
 
 test "World.{assign,unassign}" {
     const Position = struct {
-        pub const cid = 1;
         x: u32,
         y: u32,
     };
@@ -628,7 +617,6 @@ test "World.{assign,unassign}" {
         y: *u32,
     };
     const Velocity = struct {
-        pub const cid = 2;
         x: u32,
         y: u32,
     };
@@ -730,12 +718,10 @@ test "World.{assign,unassign}" {
 
 test "World.{spawnBytes,assignBytes,unassignMeta}" {
     const Position = struct {
-        pub const cid = 1;
         x: u32,
         y: u16,
     };
     const Velocity = struct {
-        pub const cid = 2;
         dx: u8,
         dy: u32,
     };
