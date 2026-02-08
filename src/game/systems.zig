@@ -106,13 +106,13 @@ pub fn cameraOnObject(ctx: SystemCtx, camera: *rl.Camera2D, object: ecs.Entity) 
 
     const map = ctx.resc.textures.getPtr("map").?;
 
-    var x = lerp(player_pos.prev_x.*, player_pos.x.*, ctx.alpha);
+    var x = interpolatedPositionX(player_pos, ctx.alpha);
     const min_x = w / 2.0;
     const max_x = @as(f32, @floatFromInt(map.width)) - w / 2.0;
     x = @max(x, min_x);
     x = @min(x, max_x);
 
-    var y = lerp(player_pos.prev_y.*, player_pos.y.*, ctx.alpha);
+    var y = interpolatedPositionY(player_pos, ctx.alpha);
     const min_y = h / (2.0);
     const max_y = @as(f32, @floatFromInt(map.height)) - h / 2.0;
     y = @max(y, min_y);
@@ -155,7 +155,7 @@ pub fn render3dModels(ctx: SystemCtx) void {
         const rv = it.get(comps.RotationView);
         const into = it.getAuto(comps.RenderInto).into;
 
-        const rotation = lerpAngleDeg(rv.prev_teta.*, rv.teta.*, ctx.alpha);
+        const rotation = interpolatedRotation(rv, ctx.alpha);
 
         const model = ctx.resc.models.getPtr(mv.name.*).?;
         const render_texture = ctx.resc.render_textures.get(into.*).?;
@@ -192,8 +192,8 @@ pub fn collectRenderables(ctx: SystemCtx, gpa: mem.Allocator, list: *RenderableL
         const texture = ctx.resc.textures.getPtr(t.name.*).?;
 
         try list.append(gpa, Renderable{
-            .x = lerp(pos.prev_x.*, pos.x.*, ctx.alpha),
-            .y = lerp(pos.prev_y.*, pos.y.*, ctx.alpha),
+            .x = interpolatedPositionX(pos, ctx.alpha),
+            .y = interpolatedPositionY(pos, ctx.alpha),
             .w = wh.w.*,
             .h = wh.h.*,
             .flip_h = false,
@@ -210,8 +210,8 @@ pub fn collectRenderables(ctx: SystemCtx, gpa: mem.Allocator, list: *RenderableL
         const h = @as(f32, @floatFromInt(render_texture.texture.height));
 
         try list.append(gpa, Renderable{
-            .x = lerp(pos.prev_x.*, pos.x.*, ctx.alpha) - h / 2.0,
-            .y = lerp(pos.prev_y.*, pos.y.*, ctx.alpha) - w / 2.0,
+            .x = interpolatedPositionX(pos, ctx.alpha) - h / 2.0,
+            .y = interpolatedPositionY(pos, ctx.alpha) - w / 2.0,
             .w = w,
             .h = h,
             .flip_h = true,
@@ -252,8 +252,8 @@ pub fn renderBoxes(ctx: SystemCtx) void {
         const pos = it_texture.get(comps.PositionView);
         const texture_name = it_texture.getAuto(comps.Texture).name;
         const texture = ctx.resc.textures.get(texture_name.*).?;
-        const x = lerp(pos.prev_x.*, pos.x.*, ctx.alpha);
-        const y = lerp(pos.prev_y.*, pos.y.*, ctx.alpha);
+        const x = interpolatedPositionX(pos, ctx.alpha);
+        const y = interpolatedPositionY(pos, ctx.alpha);
         rl.DrawRectangleLinesEx(rl.Rectangle{
             .x = x,
             .y = y,
@@ -268,8 +268,8 @@ pub fn renderBoxes(ctx: SystemCtx) void {
         const render_texture = ctx.resc.render_textures.get(into.*).?;
         const w: f32 = @floatFromInt(render_texture.texture.width);
         const h: f32 = @floatFromInt(render_texture.texture.height);
-        const x = lerp(pos.prev_x.*, pos.x.*, ctx.alpha);
-        const y = lerp(pos.prev_y.*, pos.y.*, ctx.alpha);
+        const x = interpolatedPositionX(pos, ctx.alpha);
+        const y = interpolatedPositionY(pos, ctx.alpha);
         rl.DrawRectangleLinesEx(rl.Rectangle{
             .x = x - w / 2.0,
             .y = y - h / 2.0,
@@ -308,18 +308,17 @@ const camera3d = rl.Camera3D{
     .projection = rl.CAMERA_ORTHOGRAPHIC,
 };
 
-const std = @import("std");
-const mem = std.mem;
-const math = std.math;
-const debug = std.debug;
-const assert = debug.assert;
+fn interpolatedPositionX(pos: comps.PositionView, alpha: f32) f32 {
+    return lerp(pos.prev_x.*, pos.x.*, alpha);
+}
 
-const rl = @import("../rl.zig").rl;
-const ecs = @import("../ecs.zig");
+fn interpolatedPositionY(pos: comps.PositionView, alpha: f32) f32 {
+    return lerp(pos.prev_y.*, pos.y.*, alpha);
+}
 
-const comps = @import("components.zig");
-const Rescources = @import("resources.zig");
-const SystemCtx = @import("main.zig").SystemCtx;
+fn interpolatedRotation(rot: comps.RotationView, alpha: f32) f32 {
+    return lerpAngleDeg(rot.prev_teta.*, rot.teta.*, alpha);
+}
 
 fn lerp(a: f32, b: f32, t: f32) f32 {
     return a + (b - a) * t;
@@ -335,3 +334,13 @@ fn wrapAngleDeg(angle: f32) f32 {
 fn lerpAngleDeg(a: f32, b: f32, t: f32) f32 {
     return a + wrapAngleDeg(b - a) * t;
 }
+
+const std = @import("std");
+const mem = std.mem;
+
+const rl = @import("../rl.zig").rl;
+const ecs = @import("../ecs.zig");
+
+const comps = @import("components.zig");
+const Rescources = @import("resources.zig");
+const SystemCtx = @import("main.zig").SystemCtx;

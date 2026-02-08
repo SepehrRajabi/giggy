@@ -112,57 +112,48 @@ pub fn main() !void {
     const fixed_dt = @as(f32, 1) / 60.0;
     var accumulator: f32 = 0;
     // main loop
+    var ctx = SystemCtx{
+        .resc = &resc,
+        .world = &world,
+        .cb = &command_buffer,
+        .dt = 0,
+        .alpha = 0,
+    };
     while (!rl.WindowShouldClose()) {
         const frame_dt = rl.GetFrameTime();
         accumulator += frame_dt;
 
-        const frame_ctx = SystemCtx{
-            .resc = &resc,
-            .world = &world,
-            .cb = &command_buffer,
-            .dt = frame_dt,
-            .alpha = 0,
-        };
-        systems.playerInput(frame_ctx, player);
-        const debug = systems.updateDebugMode(frame_ctx);
+        ctx.dt = frame_dt;
+        ctx.alpha = 0;
+        systems.playerInput(ctx, player);
+        const debug = systems.updateDebugMode(ctx);
 
         while (accumulator >= fixed_dt) : (accumulator -= fixed_dt) {
-            const sim_ctx = SystemCtx{
-                .resc = &resc,
-                .world = &world,
-                .cb = &command_buffer,
-                .dt = fixed_dt,
-                .alpha = 0,
-            };
-            systems.updatePositions(sim_ctx);
-            systems.updateRotations(sim_ctx);
-            systems.playMovingsAnim(sim_ctx);
+            ctx.dt = fixed_dt;
+            ctx.alpha = 0;
+            systems.updatePositions(ctx);
+            systems.updateRotations(ctx);
+            systems.playMovingsAnim(ctx);
         }
 
-        const alpha = @min(@max(accumulator / fixed_dt, 0), 1);
-        const render_ctx = SystemCtx{
-            .resc = &resc,
-            .world = &world,
-            .cb = &command_buffer,
-            .dt = frame_dt,
-            .alpha = alpha,
-        };
+        ctx.dt = frame_dt;
+        ctx.alpha = @min(@max(accumulator / fixed_dt, 0), 1);
 
-        systems.cameraOnObject(render_ctx, &camera, player);
-        systems.upldate3dModelAnimations(render_ctx);
-        systems.render3dModels(render_ctx);
+        systems.cameraOnObject(ctx, &camera, player);
+        systems.upldate3dModelAnimations(ctx);
+        systems.render3dModels(ctx);
 
         rl.BeginDrawing();
         rl.ClearBackground(rl.GRAY);
         rl.BeginMode2D(camera);
         // render main scene
-        systems.renderBackground(render_ctx, "map");
-        try systems.collectRenderables(render_ctx, allocator, &to_render);
-        systems.renderRenderables(render_ctx, &to_render);
+        systems.renderBackground(ctx, "map");
+        try systems.collectRenderables(ctx, allocator, &to_render);
+        systems.renderRenderables(ctx, &to_render);
         to_render.clearRetainingCapacity();
         if (debug) {
-            systems.renderBoxes(render_ctx);
-            systems.renderColliders(render_ctx);
+            systems.renderBoxes(ctx);
+            systems.renderColliders(ctx);
         }
         rl.EndMode2D();
         // render gui

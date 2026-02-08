@@ -125,5 +125,3 @@ pub const RenderIntoView = struct {
     pub const Of = RenderInto;
     into: *[]const u8,
 };
-
-const rl = @import("../rl.zig").rl;
