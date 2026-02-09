@@ -379,6 +379,19 @@ pub const World = struct {
             return self.current_iter.?.get(View);
         }
 
+        pub fn getOrNull(self: *const QueryIterator, comptime View: type) ?View {
+            const view_ti = @typeInfo(View);
+            if (view_ti != .@"struct")
+                @compileError("View should be a struct");
+            if (!@hasDecl(View, "Of"))
+                @compileError("View should declare 'Of'");
+
+            const Of = View.Of;
+            comptime util.assertComponent(Of);
+            if (!self.hasComponent(Of)) return null;
+            return self.current_iter.?.get(View);
+        }
+
         pub fn getAuto(self: *const QueryIterator, comptime T: type) util.ViewOf(T) {
             comptime util.assertComponent(T);
             const cid = comptime util.cidOf(T);
@@ -389,6 +402,26 @@ pub const World = struct {
             assert(found);
 
             return self.current_iter.?.getAuto(T);
+        }
+
+        pub fn getAutoOrNull(self: *const QueryIterator, comptime T: type) ?util.ViewOf(T) {
+            comptime util.assertComponent(T);
+            if (!self.hasComponent(T)) return null;
+            return self.current_iter.?.getAuto(T);
+        }
+
+        pub fn hasComponent(self: *const QueryIterator, comptime C: type) bool {
+            comptime util.assertComponent(C);
+            return self.hasComponents(&[_]type{C});
+        }
+
+        pub fn hasComponents(self: *const QueryIterator, comptime Comps: []const type) bool {
+            inline for (Comps) |C| {
+                comptime util.assertComponent(C);
+                const cid = comptime util.cidOf(C);
+                if (self.current_iter.?.archetype.indexOfCID(cid) == null) return false;
+            }
+            return true;
         }
     };
 };

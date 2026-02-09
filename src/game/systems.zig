@@ -42,7 +42,9 @@ pub fn updatePositions(ctx: SystemCtx) void {
         const new_x = pos.x.* + ctx.dt * vel.x.*;
         const new_y = pos.y.* + ctx.dt * vel.y.*;
 
-        if (checkEdgeCollision(ctx, new_x, new_y, 16.0)) continue;
+        if (it.getOrNull(comps.ColliderCircleView)) |collider| {
+            if (checkEdgeCollision(ctx, new_x, new_y, collider.radius.*)) continue;
+        }
 
         pos.x.* = new_x;
         pos.y.* = new_y;
@@ -286,6 +288,22 @@ pub fn renderColliders(ctx: SystemCtx) void {
         const from: rl.Vector2 = .{ .x = line.x0.*, .y = line.y0.* };
         const to: rl.Vector2 = .{ .x = line.x1.*, .y = line.y1.* };
         rl.DrawLineEx(from, to, 4.0, rl.GREEN);
+    }
+    var circle_it = ctx.world.query(&[_]type{ comps.Position, comps.ColliderCircle });
+    while (circle_it.next()) |_| {
+        const pos = circle_it.get(comps.PositionView);
+        const col = circle_it.get(comps.ColliderCircleView);
+        const x = interpolatedPositionX(pos, ctx.alpha);
+        const y = interpolatedPositionY(pos, ctx.alpha);
+        rl.DrawRing(
+            .{ .x = x, .y = y },
+            col.radius.*,
+            col.radius.* + 4.0,
+            0,
+            360,
+            0,
+            rl.YELLOW,
+        );
     }
 }
 

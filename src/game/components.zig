@@ -24,6 +24,15 @@ pub const VelocityView = struct {
     y: *f32,
 };
 
+pub const ColliderCircle = struct {
+    radius: f32,
+};
+
+pub const ColliderCircleView = struct {
+    pub const Of = ColliderCircle;
+    radius: *f32,
+};
+
 pub const Model3D = struct {
     name: []const u8,
     mesh: usize,
