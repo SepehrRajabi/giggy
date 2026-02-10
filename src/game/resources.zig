@@ -134,5 +134,5 @@ pub const Model = struct {
 
 const std = @import("std");
 const mem = std.mem;
-const rl = @import("../rl.zig").rl;
+const rl = @import("engine").rl;
 const map_loader = @import("map_loader.zig");

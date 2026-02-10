@@ -166,7 +166,6 @@ fn randomVelocity(prng: *std.Random.Xoshiro256) Velocity {
 }
 
 const std = @import("std");
-const rl = @cImport({
-    @cInclude("raylib.h");
-});
-const ecs = @import("../ecs.zig");
+const engine = @import("engine");
+const rl = engine.rl;
+const ecs = engine.ecs;

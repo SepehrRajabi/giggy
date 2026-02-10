@@ -356,8 +356,8 @@ fn lerpAngleDeg(a: f32, b: f32, t: f32) f32 {
 const std = @import("std");
 const mem = std.mem;
 
-const rl = @import("../rl.zig").rl;
-const ecs = @import("../ecs.zig");
+const rl = @import("engine").rl;
+const ecs = @import("engine").ecs;
 
 const comps = @import("components.zig");
 const Rescources = @import("resources.zig");

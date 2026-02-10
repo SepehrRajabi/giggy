@@ -167,10 +167,11 @@ pub fn main() !void {
 
 const std = @import("std");
 const assert = std.debug.assert;
-const rl = @import("../rl.zig").rl;
-const rm = @import("../rl.zig").rm;
+const engine = @import("engine");
+const rl = engine.rl;
+const rm = engine.rm;
 
-const ecs = @import("../ecs.zig");
+const ecs = engine.ecs;
 const comps = @import("components.zig");
 const systems = @import("systems.zig");
 const map_loader = @import("map_loader.zig");

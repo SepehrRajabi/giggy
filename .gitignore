@@ -3,9 +3,7 @@
 zig-out/
 
 # deps and libs
-dep/
-lib/
-include/
+third_party/
 
 # other files
 gimp/

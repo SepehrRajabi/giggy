@@ -15,16 +15,18 @@ This ECS uses:
 If you do not have raylib installed, which you can do by taking a look at [raylib-supported-platforms](https://www.raylib.com/#supported-platforms), then run:
 ```bash
 REPO=$PWD
-mkdir -p ./{dep,include,lib}
+mkdir -p third_party
 
 # clone and compile raylib
-cd dep
+cd third_party
 git clone --depth 1 https://github.com/raysan5/raylib.git raylib
 cd raylib/src
 make clean || exit 1
 make PLATFORM=PLATFORM_DESKTOP || exit 1
-cp libraylib.a  $REPO/lib/
-cp *.h $REPO/include/
+mkdir -p $REPO/third_party/raylib/lib
+mkdir -p $REPO/third_party/raylib/include
+cp libraylib.a $REPO/third_party/raylib/lib/
+cp *.h $REPO/third_party/raylib/include/
 
 # now build project
 cd $REPO
@@ -35,6 +37,13 @@ Otherwise you can just run:
 
 ```bash
 zig build run
+```
+
+Example targets:
+```bash
+zig build example-blob
+zig build run-example-blob
+zig build examples
 ```
 
 ---
