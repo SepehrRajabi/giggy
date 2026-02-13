@@ -5,6 +5,7 @@ pub const resources = @import("./core/resources.zig");
 pub const App = app.App;
 pub const Scheduler = scheduler.Scheduler;
 pub const ResourceStore = resources.ResourceStore;
+pub const Time = app.Time;
 
 test {
     _ = app;

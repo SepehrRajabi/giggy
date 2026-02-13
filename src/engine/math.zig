@@ -46,6 +46,21 @@ pub fn clamp01(v: anytype) @TypeOf(v) {
     return @max(@min(v, 1), 0);
 }
 
+pub fn lerp(a: f32, b: f32, t: f32) f32 {
+    return a + (b - a) * t;
+}
+
+pub fn wrapAngleDeg(angle: f32) f32 {
+    var a = angle;
+    while (a > 180.0) a -= 360.0;
+    while (a < -180.0) a += 360.0;
+    return a;
+}
+
+pub fn lerpAngleDeg(a: f32, b: f32, t: f32) f32 {
+    return a + wrapAngleDeg(b - a) * t;
+}
+
 pub fn pushFromLine(c: Vec2, a: Vec2, b: Vec2, radius: f32) Vec2 {
     const ab = b.sub(a);
     const ab_len2 = ab.dot(ab);

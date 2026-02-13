@@ -1,5 +1,6 @@
 pub const Plugin = struct {
-    pub fn build(app: *core.App, _: anytype) !void {
+    pub fn build(self: @This(), app: *core.App) !void {
+        _ = self;
         var assets = try AssetManager.init(app.gpa);
         errdefer assets.deinit();
         _ = try app.insertResource(AssetManager, assets);
@@ -77,7 +78,7 @@ pub const AssetManager = struct {
                     .string => |s| s,
                     else => return Error.InvalidAssetBundle,
                 };
-                const zpath = try std.fmt.allocPrintZ(self.gpa, "{s}", .{path});
+                const zpath = try std.fmt.allocPrintSentinel(self.gpa, "{s}", .{path}, 0);
                 defer self.gpa.free(zpath);
                 _ = try self.loadTexture(entry.key_ptr.*, zpath);
             }
@@ -94,7 +95,7 @@ pub const AssetManager = struct {
                     .string => |s| s,
                     else => return Error.InvalidAssetBundle,
                 };
-                const zpath = try std.fmt.allocPrintZ(self.gpa, "{s}", .{path});
+                const zpath = try std.fmt.allocPrintSentinel(self.gpa, "{s}", .{path}, 0);
                 defer self.gpa.free(zpath);
                 _ = try self.loadModel(entry.key_ptr.*, zpath);
             }
@@ -121,9 +122,9 @@ pub const AssetManager = struct {
                     .string => |s| s,
                     else => return Error.InvalidAssetBundle,
                 };
-                const vs_z = try std.fmt.allocPrintZ(self.gpa, "{s}", .{vs_path});
+                const vs_z = try std.fmt.allocPrintSentinel(self.gpa, "{s}", .{vs_path}, 0);
                 defer self.gpa.free(vs_z);
-                const fs_z = try std.fmt.allocPrintZ(self.gpa, "{s}", .{fs_path});
+                const fs_z = try std.fmt.allocPrintSentinel(self.gpa, "{s}", .{fs_path}, 0);
                 defer self.gpa.free(fs_z);
                 _ = try self.loadShader(entry.key_ptr.*, vs_z, fs_z);
             }

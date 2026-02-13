@@ -1,5 +1,6 @@
 pub const Plugin = struct {
-    pub fn build(app: *core.App, _: anytype) !void {
+    pub fn build(self: @This(), app: *core.App) !void {
+        _ = self;
         var registry = Registry.init(app.gpa);
         errdefer registry.deinit();
         _ = try app.insertResource(Registry, registry);
@@ -13,6 +14,7 @@ pub const Registry = struct {
     const Self = @This();
     pub const PrefabFactory = *const fn (
         entity: ecs.Entity,
+        world: *ecs.World,
         command_buffer: *CommandBuffer,
         gpa: mem.Allocator,
         object: json.Value,
@@ -94,13 +96,13 @@ pub const Registry = struct {
                     const prefab_name = resolvePrefabName(object_obj) orelse continue;
                     const factory = self.factories.get(prefab_name) orelse continue;
                     const e = world.reserveEntity();
-                    try factory(e, &cb, self.gpa, object_val);
+                    try factory(e, world, &cb, self.gpa, object_val);
                 }
             } else if (mem.eql(u8, layer_type, "imagelayer")) {
                 const prefab_name = resolvePrefabName(layer_obj) orelse continue;
                 const factory = self.factories.get(prefab_name) orelse continue;
                 const e = world.reserveEntity();
-                try factory(e, &cb, self.gpa, layer_val);
+                try factory(e, world, &cb, self.gpa, layer_val);
             }
         }
         try cb.flush(world);
@@ -152,13 +154,15 @@ test "Registry.spawnFromTiledValue spawns from object and image layers" {
     };
 
     const funcs = struct {
-        fn boxFactory(entity: ecs.Entity, cb: *CommandBuffer, gpa: mem.Allocator, object: json.Value) !void {
+        fn boxFactory(entity: ecs.Entity, world: *ecs.World, cb: *CommandBuffer, gpa: mem.Allocator, object: json.Value) !void {
+            _ = world;
             _ = gpa;
             _ = object;
             try cb.spawnBundle(entity, Bundle, .{ .spawned = .{ .kind = 1 } });
         }
 
-        fn skyFactory(entity: ecs.Entity, cb: *CommandBuffer, gpa: mem.Allocator, object: json.Value) !void {
+        fn skyFactory(entity: ecs.Entity, world: *ecs.World, cb: *CommandBuffer, gpa: mem.Allocator, object: json.Value) !void {
+            _ = world;
             _ = gpa;
             _ = object;
             try cb.spawnBundle(entity, Bundle, .{ .spawned = .{ .kind = 2 } });

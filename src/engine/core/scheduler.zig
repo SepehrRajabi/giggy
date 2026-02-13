@@ -63,16 +63,32 @@ pub const Scheduler = struct {
     }
 
     pub fn tick(self: *Self, app: *App, dt: f32) !void {
+        const time = app.getResource(Time);
         if (!self.startup_ran) {
+            if (time) |t| {
+                t.*.dt = 0;
+                t.*.fixed_dt = self.fixed_dt;
+                t.*.alpha = 0;
+            }
             try self.runStep(.startup, app);
             self.startup_ran = true;
         }
 
         self.accumulator += dt;
         while (self.accumulator >= self.fixed_dt) : (self.accumulator -= self.fixed_dt) {
+            if (time) |t| {
+                t.*.dt = self.fixed_dt;
+                t.*.fixed_dt = self.fixed_dt;
+                t.*.alpha = 0;
+            }
             try self.runStep(.fixed_update, app);
         }
 
+        if (time) |t| {
+            t.*.dt = dt;
+            t.*.fixed_dt = self.fixed_dt;
+            t.*.alpha = if (self.fixed_dt > 0) xmath.clamp01(self.accumulator / self.fixed_dt) else 0;
+        }
         try self.runStep(.update, app);
         try self.runStep(.render, app);
     }
@@ -80,5 +96,7 @@ pub const Scheduler = struct {
 
 const std = @import("std");
 const mem = std.mem;
+const xmath = @import("../math.zig");
 
 const App = @import("app.zig").App;
+const Time = @import("app.zig").Time;
