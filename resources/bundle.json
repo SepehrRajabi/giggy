@@ -1,0 +1,17 @@
+{
+  "textures": {
+    "map": "resources/map.png",
+    "abol": "resources/abol.png",
+    "wall1": "resources/wall1.png",
+    "wall2": "resources/wall2.png"
+  },
+  "models": {
+    "greenman": "resources/gltf/greenman.glb"
+  },
+  "shaders": {
+    "skinning": {
+      "vs": "resources/shaders/glsl330/skinning.vs",
+      "fs": "resources/shaders/glsl330/skinning.vs"
+    }
+  }
+}
