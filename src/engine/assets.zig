@@ -1,3 +1,11 @@
+pub const Plugin = struct {
+    pub fn build(app: *core.App, _: anytype) !void {
+        var assets = try AssetManager.init(app.gpa);
+        errdefer assets.deinit();
+        _ = try app.insertResource(AssetManager, assets);
+    }
+};
+
 pub const AssetManager = struct {
     textures: std.StringHashMap(rl.Texture),
     models: std.StringHashMap(Model),
@@ -215,3 +223,4 @@ const json = std.json;
 const fs = std.fs;
 const math = std.math;
 const rl = @import("rl.zig").rl;
+const core = @import("core.zig");

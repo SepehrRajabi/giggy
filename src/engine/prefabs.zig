@@ -1,3 +1,11 @@
+pub const Plugin = struct {
+    pub fn build(app: *core.App, _: anytype) !void {
+        var registry = Registry.init(app.gpa);
+        errdefer registry.deinit();
+        _ = try app.insertResource(Registry, registry);
+    }
+};
+
 pub const Registry = struct {
     factories: std.StringHashMap(PrefabFactory),
     gpa: mem.Allocator,
@@ -195,6 +203,7 @@ test "Registry.spawnFromTiledValue spawns from object and image layers" {
 }
 
 const std = @import("std");
+const core = @import("core.zig");
 const ecs = @import("ecs.zig");
 const CommandBuffer = ecs.CommandBuffer;
 
