@@ -4,3 +4,4 @@ pub const player = @import("plugins/player.zig");
 pub const physics = @import("plugins/physics.zig");
 pub const level = @import("plugins/level.zig");
 pub const render = @import("plugins/render.zig");
+pub const debug = @import("plugins/debug.zig");

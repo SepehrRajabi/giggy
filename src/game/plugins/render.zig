@@ -1,19 +1,46 @@
 pub const RenderPlugin = struct {
     pub fn build(self: @This(), app: *core.App) !void {
         _ = self;
+        try app.addSystem(.fixed_update, PlayMovingsAnimSystem);
         try app.addSystem(.update, Update3dModelAnimationsSystem);
         try app.addSystem(.render, Render3dModelsSystem);
         try app.addSystem(.render, RenderBeginSystem);
         try app.addSystem(.render, RenderBackgroundSystem);
         try app.addSystem(.render, CollectRenderablesSystem);
         try app.addSystem(.render, RenderRenderablesSystem);
-        try app.addSystem(.render, RenderDebugSystem);
+        try app.addSystem(.render, RenderEndMode2DSystem);
         try app.addSystem(.render, RenderEndSystem);
         try app.addSystem(.render, ClearRenderablesSystem);
     }
 };
 
+const PlayMovingsAnimSystem = struct {
+    pub const provides: []const []const u8 = &.{ "animation", "animation.set" };
+    pub const after_all_labels: []const []const u8 = &.{"physics"};
+
+    pub fn run(app: *core.App) !void {
+        var it = app.world.query(&[_]type{ comps.Animation, comps.Velocity, comps.MoveAnimation });
+        while (it.next()) |_| {
+            const av = it.get(comps.AnimationView);
+            const vv = it.get(comps.VelocityView);
+            const mav = it.get(comps.MoveAnimationView);
+            const new_anim = if (@abs(vv.x.*) > 0.1 or @abs(vv.y.*) > 0.1)
+                mav.run.*
+            else
+                mav.idle.*;
+            if (new_anim != av.index.*) {
+                av.index.* = new_anim;
+                av.frame.* = 0;
+                av.speed.* = mav.speed.*;
+            }
+        }
+    }
+};
+
 const Update3dModelAnimationsSystem = struct {
+    pub const provides: []const []const u8 = &.{ "animation", "animation.update" };
+    pub const after_all_labels: []const []const u8 = &.{"animation.set"};
+
     pub fn run(app: *core.App) !void {
         const time = app.getResource(core.Time).?;
         const assets = app.getResource(engine.assets.AssetManager).?;
@@ -42,6 +69,7 @@ const Update3dModelAnimationsSystem = struct {
 
 const Render3dModelsSystem = struct {
     pub const provides: []const []const u8 = &.{LabelRenderPrepass};
+    pub const after_all_labels: []const []const u8 = &.{"animation.update"};
 
     pub fn run(app: *core.App) !void {
         const time = app.getResource(core.Time).?;
@@ -182,93 +210,22 @@ const RenderRenderablesSystem = struct {
     }
 };
 
-const RenderDebugSystem = struct {
-    pub const provides: []const []const u8 = &.{LabelRenderPass};
-    pub const after_ids_optional: []const []const u8 = &.{RenderRenderablesSystem.id};
+const RenderEndMode2DSystem = struct {
+    pub const provides: []const []const u8 = &.{LabelRenderEndMode2D};
+    pub const after_all_labels: []const []const u8 = &.{LabelRenderPass};
 
     pub fn run(app: *core.App) !void {
-        const debug = app.getResource(resources.DebugState).?;
-        if (!debug.enabled) return;
-        renderBoxes(app);
-        renderColliders(app);
-    }
-
-    fn renderBoxes(app: *core.App) void {
-        const time = app.getResource(core.Time).?;
-        const assets = app.getResource(engine.assets.AssetManager).?;
-        var it_texture = app.world.query(&[_]type{ comps.Position, comps.Texture });
-        while (it_texture.next()) |_| {
-            const pos = it_texture.get(comps.PositionView);
-            const texture_name = it_texture.getAuto(comps.Texture).name;
-            const texture = assets.textures.get(texture_name.*).?;
-            const x = interpolatedPositionX(pos, time.alpha);
-            const y = interpolatedPositionY(pos, time.alpha);
-            rl.DrawRectangleLinesEx(rl.Rectangle{
-                .x = x,
-                .y = y,
-                .width = @floatFromInt(texture.width),
-                .height = @floatFromInt(texture.height),
-            }, 4.0, rl.RED);
-        }
-        const render_targets = app.getResource(resources.RenderTargets).?;
-        var it_render = app.world.query(&[_]type{ comps.Position, comps.RenderInto });
-        while (it_render.next()) |_| {
-            const pos = it_render.get(comps.PositionView);
-            const into = it_render.getAuto(comps.RenderInto).into;
-            const render_texture = render_targets.render_textures.get(into.*).?;
-            const w: f32 = @floatFromInt(render_texture.texture.width);
-            const h: f32 = @floatFromInt(render_texture.texture.height);
-            const x = interpolatedPositionX(pos, time.alpha);
-            const y = interpolatedPositionY(pos, time.alpha);
-            rl.DrawRectangleLinesEx(rl.Rectangle{
-                .x = x - w / 2.0,
-                .y = y - h / 2.0,
-                .width = w,
-                .height = h,
-            }, 4.0, rl.RED);
-        }
-    }
-
-    fn renderColliders(app: *core.App) void {
-        const time = app.getResource(core.Time).?;
-        var it = app.world.query(&[_]type{comps.ColliderLine});
-        while (it.next()) |_| {
-            const line = it.get(comps.ColliderLineView);
-            const from: rl.Vector2 = .{ .x = line.x0.*, .y = line.y0.* };
-            const to: rl.Vector2 = .{ .x = line.x1.*, .y = line.y1.* };
-            rl.DrawLineEx(from, to, 4.0, rl.GREEN);
-        }
-        var circle_it = app.world.query(&[_]type{ comps.Position, comps.ColliderCircle });
-        while (circle_it.next()) |_| {
-            const pos = circle_it.get(comps.PositionView);
-            const col = circle_it.get(comps.ColliderCircleView);
-            const x = interpolatedPositionX(pos, time.alpha);
-            const y = interpolatedPositionY(pos, time.alpha);
-            rl.DrawRing(
-                .{ .x = x, .y = y },
-                col.radius.*,
-                col.radius.* + 4.0,
-                0,
-                360,
-                0,
-                rl.YELLOW,
-            );
-        }
+        _ = app;
+        rl.EndMode2D();
     }
 };
 
 const RenderEndSystem = struct {
     pub const provides: []const []const u8 = &.{LabelRenderEnd};
-    pub const after_all_labels: []const []const u8 = &.{LabelRenderPass};
+    pub const after_all_labels: []const []const u8 = &.{ LabelRenderEndMode2D, LabelRenderOverlay };
 
     pub fn run(app: *core.App) !void {
-        const debug = app.getResource(resources.DebugState).?;
-        const screen = app.getResource(resources.Screen).?;
-        rl.EndMode2D();
-        if (debug.enabled) {
-            const fps_y: c_int = @intCast(screen.height);
-            rl.DrawFPS(10, fps_y - 30);
-        }
+        _ = app;
         rl.EndDrawing();
     }
 };
@@ -302,10 +259,14 @@ fn interpolatedRotation(rot: comps.RotationView, alpha: f32) f32 {
     return engine.math.lerpAngleDeg(rot.prev_teta.*, rot.teta.*, alpha);
 }
 
-const LabelRenderPrepass = "render.prepass";
-const LabelRenderBegin = "render.begin";
-const LabelRenderPass = "render.pass";
-const LabelRenderEnd = "render.end";
+pub const LabelRenderPrepass = "render.prepass";
+pub const LabelRenderBegin = "render.begin";
+pub const LabelRenderPass = "render.pass";
+pub const LabelRenderEndMode2D = "render.end_mode_2d";
+pub const LabelRenderOverlay = "render.overlay";
+pub const LabelRenderEnd = "render.end";
+
+pub const RenderablesSystemId = RenderRenderablesSystem.id;
 
 const std = @import("std");
 

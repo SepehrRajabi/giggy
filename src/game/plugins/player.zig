@@ -17,8 +17,6 @@ pub const PlayerPlugin = struct {
         _ = try app.insertResource(resources.Player, .{ .entity = player });
 
         try app.addSystem(.update, PlayerInputSystem);
-        try app.addSystem(.fixed_update, PlayMovingsAnimSystem);
-        try app.addSystem(.update, CameraOnObjectSystem);
     }
 };
 
@@ -74,64 +72,6 @@ const PlayerInputSystem = struct {
         vel.y.* = y;
     }
 };
-
-const PlayMovingsAnimSystem = struct {
-    pub fn run(app: *core.App) !void {
-        var it = app.world.query(&[_]type{ comps.Animation, comps.Velocity, comps.MoveAnimation });
-        while (it.next()) |_| {
-            const av = it.get(comps.AnimationView);
-            const vv = it.get(comps.VelocityView);
-            const mav = it.get(comps.MoveAnimationView);
-            const new_anim = if (@abs(vv.x.*) > 0.1 or @abs(vv.y.*) > 0.1)
-                mav.run.*
-            else
-                mav.idle.*;
-            if (new_anim != av.index.*) {
-                av.index.* = new_anim;
-                av.frame.* = 0;
-                av.speed.* = mav.speed.*;
-            }
-        }
-    }
-};
-
-const CameraOnObjectSystem = struct {
-    pub fn run(app: *core.App) !void {
-        const time = app.getResource(core.Time).?;
-        const player = app.getResource(resources.Player).?.entity;
-        const camera_state = app.getResource(resources.CameraState).?;
-        const screen = app.getResource(resources.Screen).?;
-        const assets = app.getResource(engine.assets.AssetManager).?;
-        const pos = app.world.get(comps.PositionView, player).?;
-
-        const w = @as(f32, @floatFromInt(screen.width));
-        const h = @as(f32, @floatFromInt(screen.height));
-
-        const map = assets.textures.getPtr("map").?;
-
-        var x = interpolatedPositionX(pos, time.alpha);
-        const min_x = w / 2.0;
-        const max_x = @as(f32, @floatFromInt(map.width)) - w / 2.0;
-        x = @max(x, min_x);
-        x = @min(x, max_x);
-
-        var y = interpolatedPositionY(pos, time.alpha);
-        const min_y = h / 2.0;
-        const max_y = @as(f32, @floatFromInt(map.height)) - h / 2.0;
-        y = @max(y, min_y);
-        y = @min(y, max_y);
-
-        camera_state.camera.target = .{ .x = x, .y = y };
-    }
-};
-
-fn interpolatedPositionX(pos: comps.PositionView, alpha: f32) f32 {
-    return xmath.lerp(pos.prev_x.*, pos.x.*, alpha);
-}
-
-fn interpolatedPositionY(pos: comps.PositionView, alpha: f32) f32 {
-    return xmath.lerp(pos.prev_y.*, pos.y.*, alpha);
-}
 
 const std = @import("std");
 const engine = @import("engine");

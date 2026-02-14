@@ -8,7 +8,7 @@ pub const PhysicsPlugin = struct {
 };
 
 const UpdatePositionsSystem = struct {
-    pub const provides: []const []const u8 = &.{"movement"};
+    pub const provides: []const []const u8 = &.{ "movement", "physics" };
     pub const after_all_labels: []const []const u8 = &.{"input"};
 
     pub fn run(app: *core.App) !void {
@@ -28,7 +28,7 @@ const UpdatePositionsSystem = struct {
 };
 
 const UpdateRotationsSystem = struct {
-    pub const provides: []const []const u8 = &.{"movement"};
+    pub const provides: []const []const u8 = &.{ "movement", "physics" };
     pub const after_all_labels: []const []const u8 = &.{"input"};
 
     pub fn run(app: *core.App) !void {
@@ -49,7 +49,7 @@ const UpdateRotationsSystem = struct {
 };
 
 const ColliderRigidBodySystem = struct {
-    pub const provides: []const []const u8 = &.{"collision"};
+    pub const provides: []const []const u8 = &.{ "collision", "physics" };
     pub const after_all_labels: []const []const u8 = &.{"movement"};
 
     pub fn run(app: *core.App) !void {
