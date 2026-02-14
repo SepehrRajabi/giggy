@@ -1,12 +1,13 @@
 pub const Scheduler = struct {
-    startup: std.ArrayListUnmanaged(SystemFn),
-    fixed_update: std.ArrayListUnmanaged(SystemFn),
-    update: std.ArrayListUnmanaged(SystemFn),
-    render: std.ArrayListUnmanaged(SystemFn),
-    gpa: mem.Allocator,
+    startup: StepSchedule,
+    fixed_update: StepSchedule,
+    update: StepSchedule,
+    render: StepSchedule,
     fixed_dt: f32,
     accumulator: f32,
     startup_ran: bool,
+    dirty: bool,
+    gpa: mem.Allocator,
 
     const Self = @This();
     pub const SystemFn = *const fn (*App) anyerror!void;
@@ -27,6 +28,7 @@ pub const Scheduler = struct {
             .fixed_dt = 1.0 / 60.0,
             .accumulator = 0,
             .startup_ran = false,
+            .dirty = false,
         };
     }
 
@@ -37,21 +39,34 @@ pub const Scheduler = struct {
         self.render.deinit(self.gpa);
     }
 
-    pub fn add(self: *Self, step: Step, system: SystemFn) !void {
+    pub fn add(self: *Self, step: Step, comptime system: type) !void {
+        comptime assertSystem(system);
+        const desc = SystemDesc{
+            .id = comptime systemId(system),
+            .run = system.run,
+            .provides = comptime systemList(system, "provides"),
+            .after_ids = comptime systemList(system, "after_ids"),
+            .after_ids_optional = comptime systemList(system, "after_ids_optional"),
+            .after_all_labels = comptime systemList(system, "after_all_labels"),
+        };
         switch (step) {
-            .startup => try self.startup.append(self.gpa, system),
-            .fixed_update => try self.fixed_update.append(self.gpa, system),
-            .update => try self.update.append(self.gpa, system),
-            .render => try self.render.append(self.gpa, system),
+            .startup => try self.startup.add(self.gpa, desc),
+            .fixed_update => try self.fixed_update.add(self.gpa, desc),
+            .update => try self.update.add(self.gpa, desc),
+            .render => try self.render.add(self.gpa, desc),
         }
+        self.dirty = true;
     }
 
     pub fn runStep(self: *Self, step: Step, app: *App) !void {
+        if (self.dirty) {
+            try self.finalize();
+        }
         const list = switch (step) {
-            .startup => self.startup.items,
-            .fixed_update => self.fixed_update.items,
-            .update => self.update.items,
-            .render => self.render.items,
+            .startup => self.startup.compiled.items,
+            .fixed_update => self.fixed_update.compiled.items,
+            .update => self.update.compiled.items,
+            .render => self.render.compiled.items,
         };
         for (list) |system| {
             try system(app);
@@ -63,6 +78,9 @@ pub const Scheduler = struct {
     }
 
     pub fn tick(self: *Self, app: *App, dt: f32) !void {
+        if (self.dirty) {
+            try self.finalize();
+        }
         const time = app.getResource(Time);
         if (!self.startup_ran) {
             if (time) |t| {
@@ -92,11 +110,265 @@ pub const Scheduler = struct {
         try self.runStep(.update, app);
         try self.runStep(.render, app);
     }
+
+    pub fn finalize(self: *Self) !void {
+        if (!self.dirty) return;
+        try self.startup.compile(self.gpa);
+        try self.fixed_update.compile(self.gpa);
+        try self.update.compile(self.gpa);
+        try self.render.compile(self.gpa);
+        self.dirty = false;
+    }
+
+    const SystemDesc = struct {
+        id: ?[]const u8,
+        run: SystemFn,
+        provides: []const []const u8,
+        after_ids: []const []const u8,
+        after_ids_optional: []const []const u8,
+        after_all_labels: []const []const u8,
+    };
+
+    const StepSchedule = struct {
+        systems: std.ArrayListUnmanaged(SystemDesc) = .{},
+        compiled: std.ArrayListUnmanaged(SystemFn) = .{},
+
+        pub fn deinit(self: *StepSchedule, gpa: mem.Allocator) void {
+            self.systems.deinit(gpa);
+            self.compiled.deinit(gpa);
+        }
+
+        pub fn add(self: *StepSchedule, gpa: mem.Allocator, desc: SystemDesc) !void {
+            try self.systems.append(gpa, desc);
+        }
+
+        pub fn compile(self: *StepSchedule, gpa: mem.Allocator) !void {
+            self.compiled.clearRetainingCapacity();
+            var graph = graph_mod.Graph.init(gpa);
+            defer graph.deinit();
+
+            const system_count = self.systems.items.len;
+            for (0..system_count) |_| {
+                _ = try graph.addNode();
+            }
+
+            var id_map = std.StringHashMapUnmanaged(usize){};
+            defer id_map.deinit(gpa);
+
+            for (self.systems.items, 0..) |system, index| {
+                if (system.id) |id| {
+                    if (id_map.contains(id)) return error.DuplicateSystemId;
+                    try id_map.put(gpa, id, index);
+                }
+            }
+
+            var label_map = std.StringHashMapUnmanaged(std.ArrayListUnmanaged(usize)){};
+            defer {
+                var it = label_map.valueIterator();
+                while (it.next()) |list| {
+                    list.deinit(gpa);
+                }
+                label_map.deinit(gpa);
+            }
+
+            for (self.systems.items, 0..) |system, index| {
+                for (system.provides) |label| {
+                    const entry = try label_map.getOrPut(gpa, label);
+                    if (!entry.found_existing) {
+                        entry.value_ptr.* = .{};
+                    }
+                    try entry.value_ptr.append(gpa, index);
+                }
+            }
+
+            for (self.systems.items, 0..) |system, index| {
+                for (system.after_ids) |dep_id| {
+                    const dep_index = id_map.get(dep_id) orelse return error.MissingSystemId;
+                    try graph.addEdge(dep_index, index);
+                }
+                for (system.after_ids_optional) |dep_id| {
+                    if (id_map.get(dep_id)) |dep_index| {
+                        try graph.addEdge(dep_index, index);
+                    }
+                }
+                for (system.after_all_labels) |label| {
+                    if (label_map.get(label)) |providers| {
+                        for (providers.items) |provider| {
+                            try graph.addEdge(provider, index);
+                        }
+                    }
+                }
+            }
+
+            var order = try graph.topoSort(gpa);
+            defer order.deinit(gpa);
+
+            try self.compiled.ensureTotalCapacity(gpa, system_count);
+            for (order.items) |index| {
+                try self.compiled.append(gpa, self.systems.items[index].run);
+            }
+        }
+    };
+
+    fn systemId(comptime S: type) ?[]const u8 {
+        if (!@hasDecl(S, "id")) return null;
+        const value = @field(S, "id");
+        const value_type = @TypeOf(value);
+        return switch (@typeInfo(value_type)) {
+            .pointer => |ptr| switch (ptr.size) {
+                .slice => if (ptr.child == u8)
+                    value
+                else
+                    @compileError("system id must be a string"),
+                .one => switch (@typeInfo(ptr.child)) {
+                    .array => |arr| if (arr.child == u8)
+                        value[0..arr.len]
+                    else
+                        @compileError("system id must be a string"),
+                    else => @compileError("system id must be a string"),
+                },
+                else => @compileError("system id must be a string"),
+            },
+            .array => |arr| if (arr.child == u8)
+                value[0..arr.len]
+            else
+                @compileError("system id must be a string"),
+            else => @compileError("system id must be a string"),
+        };
+    }
+
+    fn systemList(comptime S: type, comptime field_name: []const u8) []const []const u8 {
+        if (!@hasDecl(S, field_name)) return &.{};
+        const value = @field(S, field_name);
+        const value_type = @TypeOf(value);
+        return switch (@typeInfo(value_type)) {
+            .pointer => |ptr| switch (ptr.size) {
+                .slice => if (ptr.child == []const u8)
+                    value
+                else
+                    @compileError("system list must be []const []const u8"),
+                .one => switch (@typeInfo(ptr.child)) {
+                    .array => |arr| if (arr.child == []const u8)
+                        value.*[0..]
+                    else
+                        @compileError("system list must be []const []const u8"),
+                    else => @compileError("system list must be []const []const u8"),
+                },
+                else => @compileError("system list must be []const []const u8"),
+            },
+            .array => |arr| if (arr.child == []const u8)
+                value[0..]
+            else
+                @compileError("system list must be []const []const u8"),
+            else => @compileError("system list must be []const []const u8"),
+        };
+    }
+
+    fn assertSystem(comptime S: type) void {
+        if (!std.meta.hasFn(S, "run")) {
+            @compileError("system must declare `pub fn run(app: *App) anyerror!void`");
+        }
+        const run_type = @TypeOf(S.run);
+        const info = @typeInfo(run_type);
+        if (info != .@"fn") {
+            @compileError("system.run must be a function");
+        }
+        const fn_info = info.@"fn";
+        if (fn_info.params.len != 1) {
+            @compileError("system.run must take exactly one parameter: *App");
+        }
+        const param_type = fn_info.params[0].type orelse {
+            @compileError("system.run parameter must be *App");
+        };
+        if (param_type != *App) {
+            @compileError("system.run parameter must be *App");
+        }
+        const ret_type = fn_info.return_type orelse {
+            @compileError("system.run must return anyerror!void");
+        };
+        const ret_info = @typeInfo(ret_type);
+        if (ret_info != .error_union or ret_info.error_union.payload != void) {
+            @compileError("system.run must return anyerror!void");
+        }
+    }
 };
+
+test "scheduler orders by dependencies and labels" {
+    const testing = std.testing;
+    const alloc = testing.allocator;
+
+    var scheduler = Scheduler.init(alloc);
+    defer scheduler.deinit();
+
+    const Begin = struct {
+        pub fn run(_: *App) !void {}
+        pub const provides: []const []const u8 = &.{"begin"};
+    };
+    const Pass1 = struct {
+        pub fn run(_: *App) !void {}
+        pub const provides: []const []const u8 = &.{"pass"};
+        pub const after_all_labels: []const []const u8 = &.{"begin"};
+    };
+    const Pass2 = struct {
+        pub fn run(_: *App) !void {}
+        pub const provides: []const []const u8 = &.{"pass"};
+        pub const after_all_labels: []const []const u8 = &.{"begin"};
+    };
+    const End = struct {
+        pub fn run(_: *App) !void {}
+        pub const after_all_labels: []const []const u8 = &.{"pass"};
+    };
+
+    try scheduler.add(.render, Pass2);
+    try scheduler.add(.render, Begin);
+    try scheduler.add(.render, End);
+    try scheduler.add(.render, Pass1);
+
+    try scheduler.finalize();
+    const list = scheduler.render.compiled.items;
+    try testing.expectEqual(@as(usize, 4), list.len);
+    try testing.expectEqual(Begin.run, list[0]);
+    try testing.expectEqual(Pass2.run, list[1]);
+    try testing.expectEqual(Pass1.run, list[2]);
+    try testing.expectEqual(End.run, list[3]);
+}
+
+test "scheduler reports missing deps and cycles" {
+    const testing = std.testing;
+    const alloc = testing.allocator;
+
+    const MissingDep = struct {
+        pub fn run(_: *App) !void {}
+        pub const after_ids: []const []const u8 = &.{"nope"};
+    };
+
+    var scheduler_missing = Scheduler.init(alloc);
+    defer scheduler_missing.deinit();
+    try scheduler_missing.add(.update, MissingDep);
+    try testing.expectError(error.MissingSystemId, scheduler_missing.finalize());
+
+    const A = struct {
+        pub const id = "a";
+        pub fn run(_: *App) !void {}
+        pub const after_ids: []const []const u8 = &.{"b"};
+    };
+    const B = struct {
+        pub const id = "b";
+        pub fn run(_: *App) !void {}
+        pub const after_ids: []const []const u8 = &.{"a"};
+    };
+
+    var scheduler_cycle = Scheduler.init(alloc);
+    defer scheduler_cycle.deinit();
+    try scheduler_cycle.add(.update, A);
+    try scheduler_cycle.add(.update, B);
+    try testing.expectError(error.Cycle, scheduler_cycle.finalize());
+}
 
 const std = @import("std");
 const mem = std.mem;
 const xmath = @import("../math.zig");
+const graph_mod = @import("../graph.zig");
 
 const App = @import("app.zig").App;
 const Time = @import("app.zig").Time;

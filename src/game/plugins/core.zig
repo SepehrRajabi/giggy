@@ -36,16 +36,18 @@ pub const CorePlugin = struct {
         errdefer renderables.deinit();
         _ = try app.insertResource(resources.Renderables, renderables);
 
-        try app.addSystem(.update, updateDebugMode);
+        try app.addSystem(.update, UpdateDebugModeSystem);
     }
 };
 
-fn updateDebugMode(app: *core.App) !void {
-    const debug = app.getResource(resources.DebugState).?;
-    if (rl.IsKeyReleased(rl.KEY_F9)) {
-        debug.enabled = !debug.enabled;
+const UpdateDebugModeSystem = struct {
+    pub fn run(app: *core.App) !void {
+        const debug = app.getResource(resources.DebugState).?;
+        if (rl.IsKeyReleased(rl.KEY_F9)) {
+            debug.enabled = !debug.enabled;
+        }
     }
-}
+};
 
 const engine = @import("engine");
 const core = engine.core;

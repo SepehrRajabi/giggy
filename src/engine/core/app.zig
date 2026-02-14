@@ -28,7 +28,7 @@ pub const App = struct {
         try plugin.build(self);
     }
 
-    pub fn addSystem(self: *Self, step: Scheduler.Step, system: Scheduler.SystemFn) !void {
+    pub fn addSystem(self: *Self, step: Scheduler.Step, comptime system: type) !void {
         try self.scheduler.add(step, system);
     }
 
@@ -113,15 +113,19 @@ test "App plugins, resources, and scheduler" {
     };
 
     const Systems = struct {
-        fn addOne(app: *App) !void {
-            const counter = app.getResource(Counter).?;
-            counter.inc(1);
-        }
+        const AddOneSystem = struct {
+            pub fn run(app: *App) !void {
+                const counter = app.getResource(Counter).?;
+                counter.inc(1);
+            }
+        };
 
-        fn addTwo(app: *App) !void {
-            const counter = app.getResource(Counter).?;
-            counter.inc(2);
-        }
+        const AddTwoSystem = struct {
+            pub fn run(app: *App) !void {
+                const counter = app.getResource(Counter).?;
+                counter.inc(2);
+            }
+        };
     };
 
     var app = try App.init(alloc);
@@ -129,8 +133,8 @@ test "App plugins, resources, and scheduler" {
 
     var tracker_deinit_called = false;
     try app.addPlugin(CounterPlugin, .{ .tracker_deinit_called = &tracker_deinit_called });
-    try app.addSystem(.update, Systems.addOne);
-    try app.addSystem(.update, Systems.addTwo);
+    try app.addSystem(.update, Systems.AddOneSystem);
+    try app.addSystem(.update, Systems.AddTwoSystem);
     try app.runStep(.update);
 
     const actual_counter = app.getResource(Counter).?;

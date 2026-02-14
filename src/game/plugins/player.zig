@@ -16,166 +16,175 @@ pub const PlayerPlugin = struct {
         });
         _ = try app.insertResource(resources.Player, .{ .entity = player });
 
-        try app.addSystem(.update, playerInput);
-        try app.addSystem(.fixed_update, updatePositions);
-        try app.addSystem(.fixed_update, updateRotations);
-        try app.addSystem(.fixed_update, playMovingsAnim);
-        try app.addSystem(.update, cameraOnObject);
+        try app.addSystem(.update, PlayerInputSystem);
+        try app.addSystem(.fixed_update, UpdatePositionsSystem);
+        try app.addSystem(.fixed_update, UpdateRotationsSystem);
+        try app.addSystem(.fixed_update, PlayMovingsAnimSystem);
+        try app.addSystem(.update, CameraOnObjectSystem);
     }
 };
 
-fn playerInput(app: *core.App) !void {
-    const world = &app.world;
-    const player = app.getResource(resources.Player).?.entity;
-    const vel = world.get(comps.VelocityView, player).?;
-    const rot = world.get(comps.RotationView, player).?;
-    var x: f32 = 0;
-    var y: f32 = 0;
+const PlayerInputSystem = struct {
+    pub fn run(app: *core.App) !void {
+        const world = &app.world;
+        const player = app.getResource(resources.Player).?.entity;
+        const vel = world.get(comps.VelocityView, player).?;
+        const rot = world.get(comps.RotationView, player).?;
+        var x: f32 = 0;
+        var y: f32 = 0;
 
-    if (rl.IsKeyDown(rl.KEY_D)) {
-        x = 10;
-    } else if (rl.IsKeyDown(rl.KEY_A)) {
-        x = -10;
+        if (rl.IsKeyDown(rl.KEY_D)) {
+            x = 10;
+        } else if (rl.IsKeyDown(rl.KEY_A)) {
+            x = -10;
+        }
+        if (rl.IsKeyDown(rl.KEY_W)) {
+            y = -10;
+        } else if (rl.IsKeyDown(rl.KEY_S)) {
+            y = 10;
+        }
+
+        if (rl.IsGamepadAvailable(0)) {
+            var gx = rl.GetGamepadAxisMovement(0, rl.GAMEPAD_AXIS_LEFT_X);
+            var gy = rl.GetGamepadAxisMovement(0, rl.GAMEPAD_AXIS_LEFT_Y);
+            const deadzone: f32 = 0.2;
+            if (@abs(gx) < deadzone) gx = 0;
+            if (@abs(gy) < deadzone) gy = 0;
+
+            if (rl.IsGamepadButtonDown(0, rl.GAMEPAD_BUTTON_LEFT_FACE_LEFT)) gx = -1;
+            if (rl.IsGamepadButtonDown(0, rl.GAMEPAD_BUTTON_LEFT_FACE_RIGHT)) gx = 1;
+            if (rl.IsGamepadButtonDown(0, rl.GAMEPAD_BUTTON_LEFT_FACE_UP)) gy = -1;
+            if (rl.IsGamepadButtonDown(0, rl.GAMEPAD_BUTTON_LEFT_FACE_DOWN)) gy = 1;
+
+            if (@abs(gx) > 0 or @abs(gy) > 0) {
+                x = gx;
+                y = gy;
+            }
+        }
+
+        const l = std.math.sqrt(x * x + y * y);
+        if (l > 0.1) {
+            x = x / l * 250.0;
+            y = y / l * 250.0;
+
+            const angle = std.math.atan2(y, -x);
+            rot.target_teta.* = std.math.radiansToDegrees(angle) - 45.0;
+        }
+        vel.x.* = x;
+        vel.y.* = y;
     }
-    if (rl.IsKeyDown(rl.KEY_W)) {
-        y = -10;
-    } else if (rl.IsKeyDown(rl.KEY_S)) {
-        y = 10;
-    }
+};
 
-    if (rl.IsGamepadAvailable(0)) {
-        var gx = rl.GetGamepadAxisMovement(0, rl.GAMEPAD_AXIS_LEFT_X);
-        var gy = rl.GetGamepadAxisMovement(0, rl.GAMEPAD_AXIS_LEFT_Y);
-        const deadzone: f32 = 0.2;
-        if (@abs(gx) < deadzone) gx = 0;
-        if (@abs(gy) < deadzone) gy = 0;
+const UpdatePositionsSystem = struct {
+    pub fn run(app: *core.App) !void {
+        const time = app.getResource(core.Time).?;
+        var it = app.world.query(&[_]type{ comps.Position, comps.Velocity });
+        while (it.next()) |_| {
+            const pos = it.get(comps.PositionView);
+            const vel = it.get(comps.VelocityView);
 
-        if (rl.IsGamepadButtonDown(0, rl.GAMEPAD_BUTTON_LEFT_FACE_LEFT)) gx = -1;
-        if (rl.IsGamepadButtonDown(0, rl.GAMEPAD_BUTTON_LEFT_FACE_RIGHT)) gx = 1;
-        if (rl.IsGamepadButtonDown(0, rl.GAMEPAD_BUTTON_LEFT_FACE_UP)) gy = -1;
-        if (rl.IsGamepadButtonDown(0, rl.GAMEPAD_BUTTON_LEFT_FACE_DOWN)) gy = 1;
+            pos.prev_x.* = pos.x.*;
+            pos.prev_y.* = pos.y.*;
 
-        if (@abs(gx) > 0 or @abs(gy) > 0) {
-            x = gx;
-            y = gy;
+            var new_pos = xmath.Vec2{
+                .x = pos.x.* + time.dt * vel.x.*,
+                .y = pos.y.* + time.dt * vel.y.*,
+            };
+
+            if (it.getOrNull(comps.ColliderCircleView)) |collider| {
+                pushFromEdges(&app.world, &new_pos, collider.radius.*);
+            }
+
+            pos.x.* = new_pos.x;
+            pos.y.* = new_pos.y;
         }
     }
 
-    const l = std.math.sqrt(x * x + y * y);
-    if (l > 0.1) {
-        x = x / l * 250.0;
-        y = y / l * 250.0;
-
-        const angle = std.math.atan2(y, -x);
-        rot.target_teta.* = std.math.radiansToDegrees(angle) - 45.0;
-    }
-    vel.x.* = x;
-    vel.y.* = y;
-}
-
-fn updatePositions(app: *core.App) !void {
-    const time = app.getResource(core.Time).?;
-    var it = app.world.query(&[_]type{ comps.Position, comps.Velocity });
-    while (it.next()) |_| {
-        const pos = it.get(comps.PositionView);
-        const vel = it.get(comps.VelocityView);
-
-        pos.prev_x.* = pos.x.*;
-        pos.prev_y.* = pos.y.*;
-
-        var new_pos = xmath.Vec2{
-            .x = pos.x.* + time.dt * vel.x.*,
-            .y = pos.y.* + time.dt * vel.y.*,
-        };
-
-        if (it.getOrNull(comps.ColliderCircleView)) |collider| {
-            pushFromEdges(&app.world, &new_pos, collider.radius.*);
-        }
-
-        pos.x.* = new_pos.x;
-        pos.y.* = new_pos.y;
-    }
-}
-
-fn updateRotations(app: *core.App) !void {
-    const time = app.getResource(core.Time).?;
-    var it = app.world.query(&[_]type{comps.Rotation});
-    while (it.next()) |_| {
-        const rot = it.get(comps.RotationView);
-
-        rot.prev_teta.* = rot.teta.*;
-
-        var delta = xmath.wrapAngleDeg(rot.target_teta.* - rot.teta.*);
-        const max_step = rot.turn_speed_deg.* * time.dt;
-        if (delta > max_step) delta = max_step;
-        if (delta < -max_step) delta = -max_step;
-        rot.teta.* += delta;
-    }
-}
-
-fn playMovingsAnim(app: *core.App) !void {
-    var it = app.world.query(&[_]type{ comps.Animation, comps.Velocity, comps.MoveAnimation });
-    while (it.next()) |_| {
-        const av = it.get(comps.AnimationView);
-        const vv = it.get(comps.VelocityView);
-        const mav = it.get(comps.MoveAnimationView);
-        const new_anim = if (@abs(vv.x.*) > 0.1 or @abs(vv.y.*) > 0.1)
-            mav.run.*
-        else
-            mav.idle.*;
-        if (new_anim != av.index.*) {
-            av.index.* = new_anim;
-            av.frame.* = 0;
-            av.speed.* = mav.speed.*;
+    fn pushFromEdges(world: *ecs.World, pos: *xmath.Vec2, r: f32) void {
+        var it = world.query(&[_]type{comps.Line});
+        while (it.next()) |_| {
+            const line = it.get(comps.LineView);
+            const a = xmath.Vec2{ .x = line.x0.*, .y = line.y0.* };
+            const b = xmath.Vec2{ .x = line.x1.*, .y = line.y1.* };
+            if (!rl.CheckCollisionCircleLine(
+                pos.asRl(),
+                r,
+                a.asRl(),
+                b.asRl(),
+            )) continue;
+            const dist = xmath.pushFromLine(pos.*, a, b, r);
+            pos.* = pos.*.add(dist);
         }
     }
-}
+};
 
-fn cameraOnObject(app: *core.App) !void {
-    const time = app.getResource(core.Time).?;
-    const player = app.getResource(resources.Player).?.entity;
-    const camera_state = app.getResource(resources.CameraState).?;
-    const screen = app.getResource(resources.Screen).?;
-    const assets = app.getResource(engine.assets.AssetManager).?;
+const UpdateRotationsSystem = struct {
+    pub fn run(app: *core.App) !void {
+        const time = app.getResource(core.Time).?;
+        var it = app.world.query(&[_]type{comps.Rotation});
+        while (it.next()) |_| {
+            const rot = it.get(comps.RotationView);
 
-    const player_pos = app.world.get(comps.PositionView, player).?;
+            rot.prev_teta.* = rot.teta.*;
 
-    const w = @as(f32, @floatFromInt(screen.width));
-    const h = @as(f32, @floatFromInt(screen.height));
-
-    const map = assets.textures.getPtr("map").?;
-
-    var x = interpolatedPositionX(player_pos, time.alpha);
-    const min_x = w / 2.0;
-    const max_x = @as(f32, @floatFromInt(map.width)) - w / 2.0;
-    x = @max(x, min_x);
-    x = @min(x, max_x);
-
-    var y = interpolatedPositionY(player_pos, time.alpha);
-    const min_y = h / 2.0;
-    const max_y = @as(f32, @floatFromInt(map.height)) - h / 2.0;
-    y = @max(y, min_y);
-    y = @min(y, max_y);
-
-    camera_state.camera.target = .{ .x = x, .y = y };
-}
-
-fn pushFromEdges(world: *ecs.World, pos: *xmath.Vec2, r: f32) void {
-    var it = world.query(&[_]type{comps.Line});
-    while (it.next()) |_| {
-        const line = it.get(comps.LineView);
-        const a = xmath.Vec2{ .x = line.x0.*, .y = line.y0.* };
-        const b = xmath.Vec2{ .x = line.x1.*, .y = line.y1.* };
-        if (!rl.CheckCollisionCircleLine(
-            pos.asRl(),
-            r,
-            a.asRl(),
-            b.asRl(),
-        )) continue;
-        const dist = xmath.pushFromLine(pos.*, a, b, r);
-        pos.* = pos.*.add(dist);
+            var delta = xmath.wrapAngleDeg(rot.target_teta.* - rot.teta.*);
+            const max_step = rot.turn_speed_deg.* * time.dt;
+            if (delta > max_step) delta = max_step;
+            if (delta < -max_step) delta = -max_step;
+            rot.teta.* += delta;
+        }
     }
-}
+};
+
+const PlayMovingsAnimSystem = struct {
+    pub fn run(app: *core.App) !void {
+        var it = app.world.query(&[_]type{ comps.Animation, comps.Velocity, comps.MoveAnimation });
+        while (it.next()) |_| {
+            const av = it.get(comps.AnimationView);
+            const vv = it.get(comps.VelocityView);
+            const mav = it.get(comps.MoveAnimationView);
+            const new_anim = if (@abs(vv.x.*) > 0.1 or @abs(vv.y.*) > 0.1)
+                mav.run.*
+            else
+                mav.idle.*;
+            if (new_anim != av.index.*) {
+                av.index.* = new_anim;
+                av.frame.* = 0;
+                av.speed.* = mav.speed.*;
+            }
+        }
+    }
+};
+
+const CameraOnObjectSystem = struct {
+    pub fn run(app: *core.App) !void {
+        const time = app.getResource(core.Time).?;
+        const player = app.getResource(resources.Player).?.entity;
+        const camera_state = app.getResource(resources.CameraState).?;
+        const screen = app.getResource(resources.Screen).?;
+        const assets = app.getResource(engine.assets.AssetManager).?;
+        const pos = app.world.get(comps.PositionView, player).?;
+
+        const w = @as(f32, @floatFromInt(screen.width));
+        const h = @as(f32, @floatFromInt(screen.height));
+
+        const map = assets.textures.getPtr("map").?;
+
+        var x = interpolatedPositionX(pos, time.alpha);
+        const min_x = w / 2.0;
+        const max_x = @as(f32, @floatFromInt(map.width)) - w / 2.0;
+        x = @max(x, min_x);
+        x = @min(x, max_x);
+
+        var y = interpolatedPositionY(pos, time.alpha);
+        const min_y = h / 2.0;
+        const max_y = @as(f32, @floatFromInt(map.height)) - h / 2.0;
+        y = @max(y, min_y);
+        y = @min(y, max_y);
+
+        camera_state.camera.target = .{ .x = x, .y = y };
+    }
+};
 
 fn interpolatedPositionX(pos: comps.PositionView, alpha: f32) f32 {
     return xmath.lerp(pos.prev_x.*, pos.x.*, alpha);
