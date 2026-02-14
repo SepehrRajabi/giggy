@@ -81,6 +81,7 @@ fn edgeFactory(
                 .y0 = base_y + prev.y,
                 .x1 = base_x + next.x,
                 .y1 = base_y + next.y,
+                .mask = 1,
             },
         });
         prev = next;
@@ -92,6 +93,7 @@ fn edgeFactory(
             .y0 = base_y + prev.y,
             .x1 = base_x + first.x,
             .y1 = base_y + first.y,
+            .mask = 1,
         },
     });
 }

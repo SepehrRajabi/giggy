@@ -7,7 +7,7 @@ pub const PlayerPlugin = struct {
         const player = try app.world.spawn(.{
             comps.Position{ .x = 70, .y = 70, .prev_x = 70, .prev_y = 70 },
             comps.Velocity{ .x = 0, .y = 0 },
-            comps.ColliderCircle{ .radius = 16.0 },
+            comps.ColliderCircle{ .radius = 16.0, .mask = 1 },
             comps.Rotation{ .teta = 0, .prev_teta = 0, .target_teta = 0, .turn_speed_deg = 360.0 * 3 },
             comps.Model3D{ .name = "greenman", .render_texture = 0, .mesh = 0, .material = 1 },
             comps.RenderInto{ .into = "player" },

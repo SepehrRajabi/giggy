@@ -63,18 +63,19 @@ const ColliderRigidBodySystem = struct {
             const col = it.get(comps.ColliderCircleView);
 
             var pos_vec = xmath.Vec2{ .x = pos.x.*, .y = pos.y.* };
-            pushFromEdges(&app.world, &pos_vec, col.radius.*);
+            pushFromEdges(&app.world, &pos_vec, col.radius.*, col.mask.*);
             pos.x.* = pos_vec.x;
             pos.y.* = pos_vec.y;
         }
     }
 
-    fn pushFromEdges(world: *ecs.World, pos: *xmath.Vec2, r: f32) void {
+    fn pushFromEdges(world: *ecs.World, pos: *xmath.Vec2, r: f32, mask: u64) void {
         var it = world.query(&[_]type{comps.ColliderLine});
         while (it.next()) |_| {
             const line = it.get(comps.ColliderLineView);
             const a = xmath.Vec2{ .x = line.x0.*, .y = line.y0.* };
             const b = xmath.Vec2{ .x = line.x1.*, .y = line.y1.* };
+            if (line.mask.* & mask == 0) continue;
             if (!rl.CheckCollisionCircleLine(
                 pos.asRl(),
                 r,
