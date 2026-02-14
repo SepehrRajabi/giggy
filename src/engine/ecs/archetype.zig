@@ -422,8 +422,9 @@ pub const Archetype = struct {
     }
 
     pub fn pop(self: *Self) Entity {
-        assert(self.len() > 0);
-        return self.remove(self.len() - 1);
+        const l = self.len();
+        assert(l > 0);
+        return self.remove(l - 1);
     }
 
     pub fn indexOf(self: *const Self, entity: Entity) ?usize {

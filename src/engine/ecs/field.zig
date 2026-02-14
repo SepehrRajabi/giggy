@@ -81,8 +81,9 @@ pub const Field = struct {
     }
 
     pub fn pop(self: *Self) void {
-        assert(self.len() > 0);
-        self.remove(self.len() - 1);
+        const l = self.len();
+        assert(l > 0);
+        self.remove(l - 1);
     }
 
     pub fn len(self: *const Self) usize {

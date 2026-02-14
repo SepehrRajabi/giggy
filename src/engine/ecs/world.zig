@@ -33,6 +33,8 @@ pub const World = struct {
         comptime if (!util.isBundle(Bundle)) @compileError("expected Bundle as argument");
 
         const e = self.next_entity;
+        assert(!self.entity_archetype.contains(e));
+
         const types = util.typesOfBundle(Bundle);
         const meta: Archetype.StaticMeta = comptime .from(types);
         var arch = try self.getOrCreateArchetype(meta);
@@ -285,22 +287,25 @@ pub const World = struct {
         return self.archetypes.count();
     }
 
-    pub fn freeEmptyArchetypes(self: *Self) void {
-        // Collect empty archetype hashes first; removing during iteration can invalidate the iterator.
-        var to_remove = std.ArrayList(u64).initCapacity(self.gpa, 0) catch return;
-        defer to_remove.deinit(self.gpa);
+    pub fn freeEmptyArchetypesByHashes(self: *Self, hashes: []const u64) void {
+        for (hashes) |h| {
+            const arch = self.archetypes.getPtr(h) orelse continue;
+            assert(arch.len() == 0);
+            arch.deinit(self.gpa);
+            const removed = self.archetypes.remove(h);
+            assert(removed);
+        }
+    }
+
+    pub fn collectEmptyArchetypes(self: *const Self, gpa: mem.Allocator) ![]const u64 {
+        var to_remove: std.ArrayListUnmanaged(u64) = .{};
+        errdefer to_remove.deinit(gpa);
         var it = self.archetypes.iterator();
         while (it.next()) |entry| {
-            if (entry.value_ptr.len() == 0) {
-                to_remove.append(self.gpa, entry.key_ptr.*) catch return;
-            }
+            if (entry.value_ptr.len() == 0)
+                try to_remove.append(self.gpa, entry.key_ptr.*);
         }
-        for (to_remove.items) |hash| {
-            if (self.archetypes.getPtr(hash)) |arch_ptr| {
-                arch_ptr.deinit(self.gpa);
-                _ = self.archetypes.remove(hash);
-            }
-        }
+        return to_remove.toOwnedSlice(gpa);
     }
 
     fn getOrCreateArchetype(self: *Self, meta: Archetype.StaticMeta) !*Archetype {
@@ -514,7 +519,10 @@ test "World.{spawn,despawn,get}" {
     }
 
     try testing.expect(world.despawn(e1));
-    world.freeEmptyArchetypes();
+
+    const empty_archs = try world.collectEmptyArchetypes(alloc);
+    defer alloc.free(empty_archs);
+    world.freeEmptyArchetypesByHashes(empty_archs);
 
     try testing.expectEqual(0, world.count());
     try testing.expectEqual(0, world.countArchetype());
