@@ -38,6 +38,12 @@ If you want to take on a larger task, open an issue first to align on direction 
 - If possible, add unit tests for bug fixes and new behavior.
 - If you touch Zig code, run `zig fmt` on the files you change.
 
+## Tests
+
+- Run engine tests: `zig test src/engine/$MODULE`
+- If raylib headers are not in a standard include path, add includes, e.g.:
+  - `zig test src/engine/root.zig -I third_party/raylib/include -isystem /usr/include/`
+
 ## Submitting changes
 
 1) Create a focused branch.
