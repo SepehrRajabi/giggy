@@ -52,7 +52,7 @@ Either way: simulation must be cleanly separated from presentation; inputs shoul
 - [x] DAG scheduler with labels + optional IDs:
   - per-step dependency graph + topo sort
   - early errors for cycles or missing required deps
-- [ ] Refactor and cleaning current plugins (components & systems)
+- [X] Refactor and cleaning current plugins (components & systems)
   - well-defined compontents and resources
   - proper system dependencies
 

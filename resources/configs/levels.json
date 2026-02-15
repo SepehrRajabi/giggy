@@ -1,0 +1,6 @@
+{
+  "spawn": "level1",
+  "rooms": {
+    "level1": "tiled/objects.tmj"
+  }
+}

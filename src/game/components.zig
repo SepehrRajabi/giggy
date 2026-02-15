@@ -167,3 +167,23 @@ pub const RenderIntoView = struct {
     pub const Of = RenderInto;
     into: *[]const u8,
 };
+
+pub const Room = struct {
+    name: []const u8,
+    id: u32,
+
+    pub fn init(name: []const u8) Room {
+        var hash = std.hash.Wyhash.init(0);
+        hash.update(name);
+        const id: u32 = @truncate(hash.final());
+        return .{ .name = name, .id = id };
+    }
+};
+
+pub const RoomView = struct {
+    pub const Of = Room;
+    name: *[]const u8,
+    id: *u32,
+};
+
+const std = @import("std");

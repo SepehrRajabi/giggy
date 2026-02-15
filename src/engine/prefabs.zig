@@ -18,6 +18,7 @@ pub const Registry = struct {
         command_buffer: *CommandBuffer,
         entity: ecs.Entity,
         object: json.Value,
+        room: []const u8,
     ) anyerror!void;
 
     pub const Error = error{
@@ -53,13 +54,13 @@ pub const Registry = struct {
         gop.value_ptr.* = factory;
     }
 
-    pub fn spawnFromTiledFile(self: *Self, app: *core.App, page_allocator: mem.Allocator, file_path: []const u8) !void {
+    pub fn spawnFromTiledFile(self: *Self, app: *core.App, page_allocator: mem.Allocator, file_path: []const u8, room: []const u8) !void {
         var parsed = try loadTiledJson(page_allocator, file_path);
         defer parsed.deinit();
-        try self.spawnFromTiledValue(app, parsed.value);
+        try self.spawnFromTiledValue(app, parsed.value, room);
     }
 
-    pub fn spawnFromTiledValue(self: *Self, app: *core.App, map: json.Value) !void {
+    pub fn spawnFromTiledValue(self: *Self, app: *core.App, map: json.Value, room: []const u8) !void {
         var cb = try CommandBuffer.init(self.gpa);
         defer cb.deinit();
 
@@ -97,13 +98,13 @@ pub const Registry = struct {
                     const prefab_name = resolvePrefabClass(object_obj) orelse continue;
                     const factory = self.factories.get(prefab_name) orelse continue;
                     const e = app.world.reserveEntity();
-                    try factory(self.gpa, app, &cb, e, object_val);
+                    try factory(self.gpa, app, &cb, e, object_val, room);
                 }
             } else if (mem.eql(u8, layer_type, "imagelayer")) {
                 const prefab_name = resolvePrefabClass(layer_obj) orelse continue;
                 const factory = self.factories.get(prefab_name) orelse continue;
                 const e = app.world.reserveEntity();
-                try factory(self.gpa, app, &cb, e, layer_val);
+                try factory(self.gpa, app, &cb, e, layer_val, room);
             }
         }
         try cb.flush(&app.world);
@@ -155,17 +156,33 @@ test "Registry.spawnFromTiledValue spawns from object and image layers" {
     };
 
     const funcs = struct {
-        fn boxFactory(entity: ecs.Entity, world: *ecs.World, cb: *CommandBuffer, gpa: mem.Allocator, object: json.Value) !void {
-            _ = world;
+        fn boxFactory(
+            gpa: mem.Allocator,
+            app: *core.App,
+            cb: *CommandBuffer,
+            entity: ecs.Entity,
+            object: json.Value,
+            room: []const u8,
+        ) !void {
             _ = gpa;
+            _ = app;
             _ = object;
+            _ = room;
             try cb.spawnBundle(entity, Bundle, .{ .spawned = .{ .kind = 1 } });
         }
 
-        fn skyFactory(entity: ecs.Entity, world: *ecs.World, cb: *CommandBuffer, gpa: mem.Allocator, object: json.Value) !void {
-            _ = world;
+        fn skyFactory(
+            gpa: mem.Allocator,
+            app: *core.App,
+            cb: *CommandBuffer,
+            entity: ecs.Entity,
+            object: json.Value,
+            room: []const u8,
+        ) !void {
             _ = gpa;
+            _ = app;
             _ = object;
+            _ = room;
             try cb.spawnBundle(entity, Bundle, .{ .spawned = .{ .kind = 2 } });
         }
     };
@@ -175,8 +192,8 @@ test "Registry.spawnFromTiledValue spawns from object and image layers" {
     try registry.register("box", funcs.boxFactory);
     try registry.register("sky", funcs.skyFactory);
 
-    var world = try ecs.World.init(alloc);
-    defer world.deinit();
+    var app = try core.app.App.init(alloc);
+    defer app.deinit();
 
     const source =
         \\{
@@ -184,11 +201,12 @@ test "Registry.spawnFromTiledValue spawns from object and image layers" {
         \\    {
         \\      "type": "objectgroup",
         \\      "objects": [
-        \\        { "name": "box" }
+        \\        { "name": "box", "class": "box" }
         \\      ]
         \\    },
         \\    {
         \\      "type": "imagelayer",
+        \\      "class": "sky",
         \\      "name": "sky"
         \\    }
         \\  ]
@@ -198,11 +216,11 @@ test "Registry.spawnFromTiledValue spawns from object and image layers" {
     var parsed = try json.parseFromSlice(json.Value, alloc, source, .{ .allocate = .alloc_always });
     defer parsed.deinit();
 
-    try registry.spawnFromTiledValue(&world, parsed.value);
-    try testing.expectEqual(@as(usize, 2), world.count());
+    try registry.spawnFromTiledValue(&app, parsed.value, "room1");
+    try testing.expectEqual(@as(usize, 2), app.world.count());
 
-    const v0 = world.getAuto(Spawned, @as(ecs.Entity, 0)).?;
-    const v1 = world.getAuto(Spawned, @as(ecs.Entity, 1)).?;
+    const v0 = app.world.getAuto(Spawned, @as(ecs.Entity, 0)).?;
+    const v1 = app.world.getAuto(Spawned, @as(ecs.Entity, 1)).?;
     try testing.expectEqual(@as(u8, 1), v0.kind.*);
     try testing.expectEqual(@as(u8, 2), v1.kind.*);
 }

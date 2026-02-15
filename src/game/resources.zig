@@ -73,10 +73,6 @@ pub const DebugState = struct {
     }
 };
 
-pub const Level = struct {
-    file_path: []const u8,
-};
-
 pub const RenderTargets = struct {
     render_textures: std.StringHashMap(rl.RenderTexture),
     gpa: mem.Allocator,
@@ -138,6 +134,37 @@ pub const Renderables = struct {
     }
 };
 
+pub const RoomManager = struct {
+    current: ?comps.Room,
+    items: std.StringHashMap(void),
+    gpa: mem.Allocator,
+
+    const Self = @This();
+
+    pub fn init(gpa: mem.Allocator) Self {
+        return .{
+            .current = null,
+            .items = std.StringHashMap(void).init(gpa),
+            .gpa = gpa,
+        };
+    }
+
+    pub fn deinit(self: *Self) void {
+        var it = self.items.keyIterator();
+        while (it.next()) |key|
+            self.gpa.free(key.*);
+        self.items.deinit();
+    }
+
+    pub fn own(self: *Self, name: []const u8) ![]const u8 {
+        if (self.items.getKey(name)) |exists| return exists;
+        const name_copy = try self.gpa.dupe(u8, name);
+        errdefer self.gpa.free(name_copy);
+        try self.items.put(name_copy, {});
+        return name_copy;
+    }
+};
+
 const std = @import("std");
 const mem = std.mem;
 
@@ -145,4 +172,5 @@ const engine = @import("engine");
 const rl = engine.rl;
 const ecs = engine.ecs;
 
+const comps = @import("components.zig");
 const renderables = @import("plugins/render/renderables.zig");

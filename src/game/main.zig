@@ -24,9 +24,7 @@ pub fn main() !void {
     try app.addPlugin(game_plugins.assets.AssetsPlugin, .{});
     try app.addPlugin(game_plugins.physics.PhysicsPlugin, .{});
     try app.addPlugin(game_plugins.player.PlayerPlugin, .{});
-    try app.addPlugin(game_plugins.level.LevelPlugin, .{
-        .file_path = "tiled/objects.tmj",
-    });
+    try app.addPlugin(game_plugins.level.LevelPlugin, .{});
     try app.addPlugin(game_plugins.render.RenderPlugin, .{});
 
     while (!rl.WindowShouldClose()) {

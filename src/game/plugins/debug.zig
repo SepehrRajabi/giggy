@@ -50,10 +50,16 @@ const RenderDebugSystem = struct {
     fn renderBoxes(app: *core.App) void {
         const time = app.getResource(core.Time).?;
         const assets = app.getResource(engine.assets.AssetManager).?;
-        var it_texture = app.world.query(&[_]type{ comps.Position, comps.Texture });
+        const room_mgr = app.getResource(resources.RoomManager).?;
+        const current_room = room_mgr.current orelse return;
+        var it_texture = app.world.query(&[_]type{ comps.Position, comps.Texture, comps.Room });
         while (it_texture.next()) |_| {
             const pos = it_texture.get(comps.PositionView);
             const texture_name = it_texture.getAuto(comps.Texture).name;
+            const rm = it_texture.get(comps.RoomView);
+
+            if (rm.id.* != current_room.id) continue;
+
             const texture = assets.textures.get(texture_name.*).?;
             const x = interpolatedPositionX(pos, time.alpha);
             const y = interpolatedPositionY(pos, time.alpha);
@@ -65,10 +71,14 @@ const RenderDebugSystem = struct {
             }, 4.0, rl.RED);
         }
         const render_targets = app.getResource(resources.RenderTargets).?;
-        var it_render = app.world.query(&[_]type{ comps.Position, comps.RenderInto });
+        var it_render = app.world.query(&[_]type{ comps.Position, comps.RenderInto, comps.Room });
         while (it_render.next()) |_| {
             const pos = it_render.get(comps.PositionView);
             const into = it_render.getAuto(comps.RenderInto).into;
+            const rm = it_render.get(comps.RoomView);
+
+            if (rm.id.* != current_room.id) continue;
+
             const render_texture = render_targets.render_textures.get(into.*).?;
             const w: f32 = @floatFromInt(render_texture.texture.width);
             const h: f32 = @floatFromInt(render_texture.texture.height);
@@ -85,17 +95,27 @@ const RenderDebugSystem = struct {
 
     fn renderColliders(app: *core.App) void {
         const time = app.getResource(core.Time).?;
-        var it = app.world.query(&[_]type{comps.ColliderLine});
+        const room_mgr = app.getResource(resources.RoomManager).?;
+        const current_room = room_mgr.current orelse return;
+        var it = app.world.query(&[_]type{ comps.ColliderLine, comps.Room });
         while (it.next()) |_| {
             const line = it.get(comps.ColliderLineView);
+            const rm = it.get(comps.RoomView);
+
+            if (rm.id.* != current_room.id) continue;
+
             const from: rl.Vector2 = .{ .x = line.x0.*, .y = line.y0.* };
             const to: rl.Vector2 = .{ .x = line.x1.*, .y = line.y1.* };
             rl.DrawLineEx(from, to, 4.0, rl.GREEN);
         }
-        var circle_it = app.world.query(&[_]type{ comps.Position, comps.ColliderCircle });
+        var circle_it = app.world.query(&[_]type{ comps.Position, comps.ColliderCircle, comps.Room });
         while (circle_it.next()) |_| {
             const pos = circle_it.get(comps.PositionView);
             const col = circle_it.get(comps.ColliderCircleView);
+            const rm = circle_it.get(comps.RoomView);
+
+            if (rm.id.* != current_room.id) continue;
+
             const x = interpolatedPositionX(pos, time.alpha);
             const y = interpolatedPositionY(pos, time.alpha);
             rl.DrawRing(

@@ -24,6 +24,7 @@ pub const PlayerPlugin = struct {
             comps.Animation{ .index = 0, .frame = 0, .acc = 0, .speed = 0 },
             loco_animset.value,
             comps.LocomotionAnimState{ .moving = false },
+            comps.Room.init("level1"),
         });
         _ = try app.insertResource(resources.Player, .{ .entity = player });
 
