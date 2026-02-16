@@ -32,6 +32,9 @@ const UpdateDebugValuesSystem = struct {
             if (app.world.get(comps.PositionView, player.entity)) |pos| {
                 try debug.setFmt("player.pos", "{d:.1}, {d:.1}", .{ pos.x.*, pos.y.* });
             }
+            if (app.world.get(comps.RotationView, player.entity)) |rot| {
+                try debug.setFmt("player.rot", "{d:.1}, {d:.1}", .{ rot.target_teta.*, rot.teta.* });
+            }
         }
     }
 };

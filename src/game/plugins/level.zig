@@ -82,6 +82,7 @@ const DoorSystem = struct {
                     room.id.* = tp.room_id.*;
                     room_mgr.current = room.id.*;
                     player.just_spawned.* = true;
+                    player.spawn_id.* = tp.spawn_id.*;
                     break;
                 }
             }
@@ -119,10 +120,11 @@ const PrefabsFactory = struct {
 
         const x = valueToF32(object.object.get("x")).?;
         const y = valueToF32(object.object.get("y")).?;
+        const spawn_id: u8 = readSpawnId(object) orelse 0;
 
         const e = app.world.reserveEntity();
         try cb.spawnBundle(e, SpawnPointBundle, .{
-            .spawn = .{},
+            .spawn = .{ .id = spawn_id },
             .pos = .{ .x = x, .y = y, .prev_x = x, .prev_y = y },
             .room = .init(room_name),
         });
@@ -144,12 +146,15 @@ const PrefabsFactory = struct {
         const x = valueToF32(object.object.get("x")).?;
         const y = valueToF32(object.object.get("y")).?;
         const r = valueToF32(object.object.get("width")).? / 2.0;
+        // Door object `name` is used as the destination room, so do NOT infer spawn_id from it.
+        const spawn_id: u8 = readSpawnId(object) orelse 0;
 
         const e = app.world.reserveEntity();
         try cb.spawnBundle(e, DoorBundle, .{
-            .tp = .{ .room_id = comps.Room.init(tp_room).id },
-            .pos = .{ .x = x, .y = y, .prev_x = x, .prev_y = y },
-            .col = .{ .radius = r, .mask = 1 << 2 },
+            .tp = .{ .room_id = comps.Room.init(tp_room).id, .spawn_id = spawn_id },
+            // Tiled rectangle objects use (x,y) as top-left; we store position as circle center.
+            .pos = .{ .x = x + r, .y = y + r, .prev_x = x + r, .prev_y = y + r },
+            .col = .{ .radius = r, .mask = 0 },
             .room = .init(room_name),
         });
     }
@@ -366,6 +371,54 @@ fn readPoint(value: json.Value) ?Point {
     const x = valueToF32(obj.get("x")) orelse return null;
     const y = valueToF32(obj.get("y")) orelse return null;
     return .{ .x = x, .y = y };
+}
+
+fn readSpawnId(object: json.Value) ?u8 {
+    const obj = switch (object) {
+        .object => |o| o,
+        else => return null,
+    };
+
+    // Preferred: explicit Tiled custom property `spawn_id` on the object.
+    if (valueIntProperty(obj.get("properties"), "spawn_id")) |id_i64| {
+        if (id_i64 < 0 or id_i64 > std.math.maxInt(u8)) return null;
+        return @intCast(id_i64);
+    }
+
+    // Fallback: parse digits at end of object name (e.g. "spawn_point1" -> 1).
+    const name = valueToStr(obj.get("name")) orelse return null;
+    return parseTrailingU8(name);
+}
+
+fn valueIntProperty(props_opt: ?json.Value, name: []const u8) ?i64 {
+    const props = props_opt orelse return null;
+    const props_arr = switch (props) {
+        .array => |arr| arr,
+        else => return null,
+    };
+    for (props_arr.items) |props_item| {
+        const item_obj = switch (props_item) {
+            .object => |o| o,
+            else => continue,
+        };
+        const item_name = valueToStr(item_obj.get("name")) orelse continue;
+        if (!std.mem.eql(u8, item_name, name)) continue;
+        const value = item_obj.get("value") orelse return null;
+        return switch (value) {
+            .integer => |i| i,
+            else => null,
+        };
+    }
+    return null;
+}
+
+fn parseTrailingU8(s: []const u8) ?u8 {
+    var end: usize = s.len;
+    while (end > 0 and std.ascii.isDigit(s[end - 1])) : (end -= 1) {}
+    if (end == s.len) return null; // no trailing digits
+
+    const digits = s[end..];
+    return std.fmt.parseInt(u8, digits, 10) catch null;
 }
 
 fn valueToStr(value_opt: ?json.Value) ?[]const u8 {

@@ -280,6 +280,12 @@
                  "height":70,
                  "id":18,
                  "name":"level2",
+                 "properties":[
+                        {
+                         "name":"spawn_id",
+                         "type":"int",
+                         "value":0
+                        }],
                  "rotation":0,
                  "type":"door",
                  "visible":true,
@@ -301,14 +307,38 @@
                 {
                  "height":0,
                  "id":20,
-                 "name":"spawn_point1",
+                 "name":"spawn_point0",
                  "point":true,
+                 "properties":[
+                        {
+                         "name":"spawn_id",
+                         "type":"int",
+                         "value":0
+                        }],
                  "rotation":0,
                  "type":"spawn_point",
                  "visible":true,
                  "width":0,
-                 "x":784,
-                 "y":556
+                 "x":111,
+                 "y":91
+                }, 
+                {
+                 "height":0,
+                 "id":21,
+                 "name":"spawn_point1",
+                 "point":true,
+                 "properties":[
+                        {
+                         "name":"spawn_id",
+                         "type":"int",
+                         "value":1
+                        }],
+                 "rotation":0,
+                 "type":"spawn_point",
+                 "visible":true,
+                 "width":0,
+                 "x":847,
+                 "y":301
                 }],
          "opacity":1,
          "type":"objectgroup",
@@ -317,7 +347,7 @@
          "y":0
         }],
  "nextlayerid":12,
- "nextobjectid":21,
+ "nextobjectid":22,
  "orientation":"orthogonal",
  "renderorder":"right-down",
  "tiledversion":"1.11.2",

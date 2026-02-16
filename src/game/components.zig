@@ -1,16 +1,24 @@
 pub const Player = struct {
     id: u8,
     just_spawned: bool,
+    // Which SpawnPoint.id to use on the next spawn. 0 means "any/default".
+    spawn_id: u8 = 0,
 };
 
 pub const PlayerView = struct {
     pub const Of = Player;
     id: *u8,
     just_spawned: *bool,
+    spawn_id: *u8,
 };
 
 pub const SpawnPoint = struct {
     id: u8 = 0,
+};
+
+pub const SpawnPointView = struct {
+    pub const Of = SpawnPoint;
+    id: *u8,
 };
 
 pub const Position = struct {
@@ -203,11 +211,14 @@ pub const RoomView = struct {
 
 pub const Teleport = struct {
     room_id: u32,
+    // Which SpawnPoint.id to use in the destination room. 0 means "any/default".
+    spawn_id: u8 = 0,
 };
 
 pub const TeleportView = struct {
     pub const Of = Teleport;
     room_id: *u32,
+    spawn_id: *u8,
 };
 
 const std = @import("std");

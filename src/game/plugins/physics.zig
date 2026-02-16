@@ -63,6 +63,7 @@ const ColliderRigidBodySystem = struct {
             const col = it.get(comps.ColliderCircleView);
             const room = it.get(comps.RoomView);
 
+            if (col.mask.* == 0) continue;
             var pos_vec = xmath.Vec2{ .x = pos.x.*, .y = pos.y.* };
             pushFromEdges(&app.world, &pos_vec, col.radius.*, col.mask.*, room.id.*);
             pos.x.* = pos_vec.x;
@@ -78,7 +79,7 @@ const ColliderRigidBodySystem = struct {
             if (room.id.* != room_id) continue;
             const a = xmath.Vec2{ .x = line.x0.*, .y = line.y0.* };
             const b = xmath.Vec2{ .x = line.x1.*, .y = line.y1.* };
-            if (line.mask.* & mask == 0) continue;
+            if ((line.mask.* & mask) == 0) continue;
             if (!rl.CheckCollisionCircleLine(
                 pos.asRl(),
                 r,

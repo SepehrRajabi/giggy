@@ -10,14 +10,14 @@
     "fileStates": {
         "level1.tmj": {
             "expandedObjectLayers": [
-                11,
-                5
+                5,
+                11
             ],
             "scale": 1,
             "selectedLayer": 5,
             "viewCenter": {
-                "x": 653.5,
-                "y": 373
+                "x": 837,
+                "y": 280
             }
         },
         "level2.tmj": {
@@ -27,8 +27,8 @@
             "scale": 1.1138997395833334,
             "selectedLayer": 1,
             "viewCenter": {
-                "x": 904.4799672696455,
-                "y": 64.63777433589524
+                "x": 930.963499810047,
+                "y": 276.5060346591075
             }
         },
         "objects.tmj": {

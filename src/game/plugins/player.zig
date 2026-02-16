@@ -15,7 +15,7 @@ pub const PlayerPlugin = struct {
         defer loco_animset.deinit();
 
         const player = try app.world.spawn(.{
-            comps.Player{ .id = 1, .just_spawned = true },
+            comps.Player{ .id = 1, .just_spawned = true, .spawn_id = 0 },
             comps.Position{ .x = 70, .y = 70, .prev_x = 70, .prev_y = 70 },
             comps.Velocity{ .x = 0, .y = 0 },
             comps.ColliderCircle{ .radius = 16.0, .mask = 1 },
@@ -92,28 +92,60 @@ const PlayerSpawnSystem = struct {
     pub const after_all_labels: []const []const u8 = &.{"teleport"};
 
     pub fn run(app: *core.App) !void {
-        var it = app.world.query(&[_]type{ comps.SpawnPoint, comps.Position, comps.Room });
-        outer: while (it.next()) |_| {
-            const spawn_pos = it.get(comps.PositionView);
-            const spawn_room = it.get(comps.RoomView);
+        var it_player = app.world.query(&[_]type{
+            comps.Player,
+            comps.Position,
+            comps.Rotation,
+            comps.Room,
+        });
+        while (it_player.next()) |_| {
+            const pos = it_player.get(comps.PositionView);
+            const rot = it_player.get(comps.RotationView);
+            const player = it_player.get(comps.PlayerView);
+            const room = it_player.get(comps.RoomView);
+            if (!player.just_spawned.*) continue;
 
-            var it_player = app.world.query(&[_]type{ comps.Player, comps.Position, comps.Room });
-            while (it_player.next()) |_| {
-                const pos = it_player.get(comps.PositionView);
-                const player = it_player.get(comps.PlayerView);
-                const room = it_player.get(comps.RoomView);
+            const desired_spawn_id = player.spawn_id.*;
+            var best_fallback_id: ?u8 = null;
+            var best_fallback_x: f32 = 0;
+            var best_fallback_y: f32 = 0;
+            var found_x: f32 = 0;
+            var found_y: f32 = 0;
+            var found = false;
 
-                if (room.id.* != spawn_room.id.*) continue;
-                if (!player.just_spawned.*) continue;
+            var it_spawn = app.world.query(&[_]type{ comps.SpawnPoint, comps.Position, comps.Room });
+            while (it_spawn.next()) |_| {
+                const sp = it_spawn.get(comps.SpawnPointView);
+                const sp_pos = it_spawn.get(comps.PositionView);
+                const sp_room = it_spawn.get(comps.RoomView);
+                if (sp_room.id.* != room.id.*) continue;
 
-                pos.x.* = spawn_pos.x.*;
-                pos.y.* = spawn_pos.y.*;
-                pos.prev_x.* = pos.x.*;
-                pos.prev_y.* = pos.y.*;
-                player.just_spawned.* = false;
-                continue :outer;
+                // Deterministic fallback: choose the lowest spawn id in the room.
+                if (best_fallback_id == null or sp.id.* < best_fallback_id.?) {
+                    best_fallback_id = sp.id.*;
+                    best_fallback_x = sp_pos.x.*;
+                    best_fallback_y = sp_pos.y.*;
+                }
+
+                if (desired_spawn_id != 0 and sp.id.* == desired_spawn_id) {
+                    found_x = sp_pos.x.*;
+                    found_y = sp_pos.y.*;
+                    found = true;
+                    break;
+                }
             }
-            break;
+
+            const x = if (found) found_x else if (best_fallback_id != null) best_fallback_x else pos.x.*;
+            const y = if (found) found_y else if (best_fallback_id != null) best_fallback_y else pos.y.*;
+
+            rot.teta.* = 45;
+            rot.target_teta.* = 45;
+            pos.x.* = x;
+            pos.y.* = y;
+            pos.prev_x.* = x;
+            pos.prev_y.* = y;
+            player.just_spawned.* = false;
+            player.spawn_id.* = 0;
         }
     }
 };
