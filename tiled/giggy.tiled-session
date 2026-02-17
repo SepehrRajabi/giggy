@@ -3,21 +3,21 @@
         "height": 4300,
         "width": 2
     },
-    "activeFile": "level1.tmj",
+    "activeFile": "level2.tmj",
     "expandedProjectPaths": [
         "."
     ],
     "fileStates": {
         "level1.tmj": {
             "expandedObjectLayers": [
-                5,
-                11
+                11,
+                5
             ],
             "scale": 1,
             "selectedLayer": 5,
             "viewCenter": {
-                "x": 837,
-                "y": 280
+                "x": 601,
+                "y": 392
             }
         },
         "level2.tmj": {
@@ -27,8 +27,8 @@
             "scale": 1.1138997395833334,
             "selectedLayer": 1,
             "viewCenter": {
-                "x": 930.963499810047,
-                "y": 276.5060346591075
+                "x": 699.3448084397556,
+                "y": 394.1108740758058
             }
         },
         "objects.tmj": {
@@ -56,8 +56,8 @@
     "project": "giggy.tiled-project",
     "property.type": "int",
     "recentFiles": [
-        "level2.tmj",
         "level1.tmj",
+        "level2.tmj",
         "objects.tmj"
     ]
 }

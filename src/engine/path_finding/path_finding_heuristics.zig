@@ -20,38 +20,33 @@ pub const Heuristic = enum {
 /// Estimate remaining cost between two grid positions using the chosen heuristic.
 ///
 /// Returned value is an integer cost compatible with step cost = 1.
-pub fn estimate(kind: Heuristic, a: GridPos, b: GridPos) u32 {
+pub fn estimate(kind: Heuristic, a: GridPos, b: GridPos) f32 {
     return switch (kind) {
-        .manhattan => manhattan(a, b),
+        .manhattan => @floatFromInt(manhattan(a, b)),
         .euclidean => euclidean(a, b),
-        .diagonal => diagonal(a, b),
+        .diagonal => @floatFromInt(diagonal(a, b)),
     };
 }
 
-fn absDiff(a: i32, b: i32) i32 {
-    const d = a - b;
-    return if (d < 0) -d else d;
-}
-
 pub fn manhattan(a: GridPos, b: GridPos) u32 {
-    const dx: i32 = absDiff(a.x, b.x);
-    const dy: i32 = absDiff(a.y, b.y);
+    const dx: u32 = @abs(a.x - b.x);
+    const dy: u32 = @abs(a.y - b.y);
     return @intCast(dx + dy);
 }
 
-pub fn euclidean(a: GridPos, b: GridPos) u32 {
-    const dx: i32 = absDiff(a.x, b.x);
-    const dy: i32 = absDiff(a.y, b.y);
+pub fn euclidean(a: GridPos, b: GridPos) f32 {
+    const dx: u32 = @abs(a.x - b.x);
+    const dy: u32 = @abs(a.y - b.y);
     const fdx: f32 = @floatFromInt(dx);
     const fdy: f32 = @floatFromInt(dy);
     const dist = math.sqrt(fdx * fdx + fdy * fdy);
     // Round to nearest integer to keep it compatible with u32 g-costs.
-    return @intFromFloat(dist + 0.5);
+    return dist + 0.5;
 }
 
 pub fn diagonal(a: GridPos, b: GridPos) u32 {
-    const dx: i32 = absDiff(a.x, b.x);
-    const dy: i32 = absDiff(a.y, b.y);
+    const dx: u32 = @abs(a.x - b.x);
+    const dy: u32 = @abs(a.y - b.y);
     const m = if (dx > dy) dx else dy;
     return @intCast(m);
 }

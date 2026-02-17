@@ -1,16 +1,16 @@
 const Node = struct {
     pos: GridPos,
-    g: u32 = 0,
-    h: u32 = 0,
+    g: f32 = 0,
+    h: f32 = 0,
     parent: ?GridPos = null,
 
-    fn f(self: Node) u32 {
+    fn f(self: Node) f32 {
         return self.g + self.h;
     }
 };
 
-const PQContext = struct {
-    pub fn compare(_: PQContext, a: Node, b: Node) std.math.Order {
+const pq_context = struct {
+    pub fn compare(_: pq_context, a: Node, b: Node) std.math.Order {
         const af = a.f();
         const bf = b.f();
         if (af < bf) return .lt;
@@ -19,7 +19,7 @@ const PQContext = struct {
     }
 };
 
-const PQ = std.PriorityQueue(Node, PQContext, PQContext.compare);
+const PQ = std.PriorityQueue(Node, pq_context, pq_context.compare);
 
 /// Grid-based A* pathfinder that works in world space (`Vec2`).
 ///
@@ -32,6 +32,26 @@ pub const Pathfinder = struct {
     cell_size: f32,
     grid: []bool, // true = walkable
     heuristic: Heuristic,
+    directions: Directions,
+
+    pub const Directions = []const GridPos;
+    pub const principal_directions: Directions = &[_]GridPos{
+        .{ .x = 0, .y = -1 }, // up
+        .{ .x = 1, .y = 0 }, // right
+        .{ .x = 0, .y = 1 }, // down
+        .{ .x = -1, .y = 0 }, // left
+    };
+
+    pub const all_directions: Directions = &[_]GridPos{
+        .{ .x = 0, .y = -1 }, // up
+        .{ .x = 1, .y = 0 }, // right
+        .{ .x = 0, .y = 1 }, // down
+        .{ .x = -1, .y = 0 }, // left
+        .{ .x = -1, .y = -1 }, // up-left
+        .{ .x = 1, .y = -1 }, // up-right
+        .{ .x = 1, .y = 1 }, // down-right
+        .{ .x = -1, .y = 1 }, // down-left
+    };
 
     pub fn init(
         allocator: std.mem.Allocator,
@@ -39,6 +59,7 @@ pub const Pathfinder = struct {
         h: usize,
         cell_size: f32,
         heuristic: Heuristic,
+        directions: Directions,
     ) !Pathfinder {
         return .{
             .allocator = allocator,
@@ -47,6 +68,7 @@ pub const Pathfinder = struct {
             .cell_size = cell_size,
             .grid = try allocator.alloc(bool, w * h),
             .heuristic = heuristic,
+            .directions = directions,
         };
     }
 
@@ -56,7 +78,7 @@ pub const Pathfinder = struct {
         h: usize,
         cell_size: f32,
     ) !Pathfinder {
-        return Pathfinder.init(allocator, w, h, cell_size, .manhattan);
+        return Pathfinder.init(allocator, w, h, cell_size, .euclidean, all_directions);
     }
 
     pub fn deinit(self: *Pathfinder) void {
@@ -115,7 +137,7 @@ pub const Pathfinder = struct {
         var open_set = PQ.init(self.allocator, .{});
         defer open_set.deinit();
 
-        var visited = std.AutoHashMap(GridPos, u32).init(self.allocator);
+        var visited = std.AutoHashMap(GridPos, f32).init(self.allocator);
         defer visited.deinit();
 
         var came_from = std.AutoHashMap(GridPos, GridPos).init(self.allocator);
@@ -128,13 +150,6 @@ pub const Pathfinder = struct {
         });
         try visited.put(start_grid, 0);
 
-        const directions = [_]GridPos{
-            .{ .x = 0, .y = -1 },
-            .{ .x = 0, .y = 1 },
-            .{ .x = -1, .y = 0 },
-            .{ .x = 1, .y = 0 },
-        };
-
         while (open_set.count() > 0) {
             const current = open_set.remove();
 
@@ -142,7 +157,7 @@ pub const Pathfinder = struct {
                 return self.reconstructPath(came_from, current.pos);
             }
 
-            for (directions) |dir| {
+            for (self.directions) |dir| {
                 const neighbor = GridPos{
                     .x = current.pos.x + dir.x,
                     .y = current.pos.y + dir.y,
@@ -150,7 +165,8 @@ pub const Pathfinder = struct {
 
                 if (!self.isWalkable(neighbor)) continue;
 
-                const tentative_g = current.g + 1;
+                const h = heuristics.estimate(self.heuristic, neighbor, end_grid);
+                const tentative_g: f32 = current.g + h;
 
                 if (visited.get(neighbor)) |existing_g| {
                     if (tentative_g >= existing_g) continue;
@@ -162,7 +178,7 @@ pub const Pathfinder = struct {
                 try open_set.add(.{
                     .pos = neighbor,
                     .g = tentative_g,
-                    .h = heuristics.estimate(self.heuristic, neighbor, end_grid),
+                    .h = h,
                 });
             }
         }
