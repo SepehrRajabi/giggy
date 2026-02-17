@@ -45,6 +45,14 @@ const PlayerInputSystem = struct {
         var x: f32 = 0;
         var y: f32 = 0;
 
+        if (app.getResource(resources.ScreenFade)) |fade| {
+            if (fade.active()) {
+                vel.x.* = 0;
+                vel.y.* = 0;
+                return;
+            }
+        }
+
         if (rl.IsKeyDown(rl.KEY_D)) {
             x = 10;
         } else if (rl.IsKeyDown(rl.KEY_A)) {

@@ -135,7 +135,9 @@ const RenderDebugSystem = struct {
 };
 
 const RenderDebugOverlaySystem = struct {
+    pub const id = "debug.overlay";
     pub const provides: []const []const u8 = &.{render.LabelRenderOverlay};
+    pub const after_ids_optional: []const []const u8 = &.{"fade.overlay"};
     pub const after_all_labels: []const []const u8 = &.{render.LabelRenderEndMode2D};
 
     pub fn run(app: *core.App) !void {

@@ -43,21 +43,25 @@ const LevelSystem = struct {
 };
 
 const DoorSystem = struct {
-    pub const provides: []const []const u8 = &.{"teleport"};
+    pub const id = "door.system";
     pub const after_all_labels: []const []const u8 = &.{"physics"};
 
     pub fn run(app: *core.App) !void {
         const room_mgr = app.getResource(resources.RoomManager).?;
+        const fade = app.getResource(resources.ScreenFade).?;
 
         var it = app.world.query(&[_]type{
             comps.Player,
             comps.Position,
+            comps.Velocity,
             comps.Room,
         });
         while (it.next()) |_| {
-            const player = it.get(comps.PlayerView);
             const pos = it.get(comps.PositionView);
+            const vel = it.get(comps.VelocityView);
             const room = it.get(comps.RoomView);
+
+            if (fade.active()) continue;
 
             var it_door = app.world.query(&[_]type{
                 comps.Teleport,
@@ -79,10 +83,10 @@ const DoorSystem = struct {
                     .{ .x = tp_pos.x.*, .y = tp_pos.y.* },
                     tp_col.radius.*,
                 )) {
-                    room.id.* = tp.room_id.*;
-                    room_mgr.current = room.id.*;
-                    player.just_spawned.* = true;
-                    player.spawn_id.* = tp.spawn_id.*;
+                    vel.x.* = 0;
+                    vel.y.* = 0;
+                    fade.begin(.{ .room_id = tp.room_id.*, .spawn_id = tp.spawn_id.* });
+                    _ = room_mgr; // transition commit happens in FadeSystem
                     break;
                 }
             }
