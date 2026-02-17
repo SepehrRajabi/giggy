@@ -152,6 +152,7 @@ test "App plugins, resources, and scheduler" {
 
 const std = @import("std");
 const mem = std.mem;
-const ecs = @import("../ecs.zig");
+const engine = @import("engine");
+const ecs = engine.ecs;
 const ResourceStore = @import("resources.zig").ResourceStore;
 const Scheduler = @import("scheduler.zig").Scheduler;

@@ -1,11 +1,14 @@
-pub const core = @import("core.zig");
-pub const ecs = @import("ecs.zig");
-pub const assets = @import("assets.zig");
-pub const math = @import("math.zig");
-pub const prefabs = @import("prefabs.zig");
-pub const rl = @import("rl.zig").rl;
-pub const rm = @import("rl.zig").rm;
+pub const core = @import("core/root.zig");
+pub const ecs = @import("ecs/root.zig");
+pub const assets = @import("assets/root.zig");
+pub const math = @import("math/root.zig");
+pub const graph = @import("graph/root.zig");
+pub const prefabs = @import("prefabs/root.zig");
+pub const raylib = @import("raylib/root.zig").raylib;
+pub const raymath = @import("raylib/root.zig").raymath;
 
+// run tests with:
+// zig test --dep engine -Mengine=src/engine/root.zig -I third_party/raylib/include -isystem /usr/include/
 test {
     _ = std.testing.refAllDecls(@This());
 }

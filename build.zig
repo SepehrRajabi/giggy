@@ -15,6 +15,7 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = optimize,
     });
+    engine_mod.addImport("engine", engine_mod);
     if (!use_system_raylib) {
         engine_mod.addIncludePath(b.path("third_party/raylib/include/"));
     }
@@ -25,6 +26,14 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
     exe_mod.addImport("engine", engine_mod);
+    const game_mod = b.createModule(.{
+        .root_source_file = b.path("src/game/root.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    game_mod.addImport("engine", engine_mod);
+    game_mod.addImport("game", game_mod);
+    exe_mod.addImport("game", game_mod);
 
     const exe = b.addExecutable(.{
         .name = "giggy",

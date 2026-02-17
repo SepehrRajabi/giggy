@@ -11,4 +11,4 @@ pub const Renderable = struct {
 pub const RenderableList = std.ArrayList(Renderable);
 
 const std = @import("std");
-const rl = @import("engine").rl;
+const rl = @import("engine").raylib;

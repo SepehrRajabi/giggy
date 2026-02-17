@@ -1,7 +1,7 @@
 const std = @import("std");
 const engine = @import("engine");
 const ecs = engine.ecs;
-const rl = engine.rl;
+const rl = engine.raylib;
 
 const Position = struct { x: f32, y: f32 };
 const Velocity = struct { x: f32, y: f32 };

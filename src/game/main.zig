@@ -15,18 +15,22 @@ pub fn main() !void {
     try app.addPlugin(AssetsPlugin, .{});
     try app.addPlugin(PrefabPlugin, .{});
 
-    try app.addPlugin(game_plugins.core.CorePlugin, .{
+    try app.addPlugin(game_plugins.core.Plugin, .{
         .width = screenWidth,
         .height = screenHeight,
         .fixed_dt = 1.0 / 60.0,
     });
-    try app.addPlugin(game_plugins.debug.DebugPlugin, .{});
-    try app.addPlugin(game_plugins.assets.AssetsPlugin, .{});
-    try app.addPlugin(game_plugins.physics.PhysicsPlugin, .{});
-    try app.addPlugin(game_plugins.player.PlayerPlugin, .{});
-    try app.addPlugin(game_plugins.level.LevelPlugin, .{});
-    try app.addPlugin(game_plugins.fade.FadePlugin, .{});
-    try app.addPlugin(game_plugins.render.RenderPlugin, .{});
+    try app.addPlugin(game_plugins.debug.Plugin, .{});
+    try app.addPlugin(game_plugins.assets.Plugin, .{});
+    try app.addPlugin(game_plugins.render.Plugin, .{});
+    try app.addPlugin(game_plugins.physics.Plugin, .{});
+    try app.addPlugin(game_plugins.player.Plugin, .{});
+    try app.addPlugin(game_plugins.camera.Plugin, .{
+        .width = screenWidth,
+        .height = screenHeight,
+    });
+    try app.addPlugin(game_plugins.level.Plugin, .{});
+    try app.addPlugin(game_plugins.fade.Plugin, .{});
 
     while (!rl.WindowShouldClose()) {
         const frame_dt = rl.GetFrameTime();
@@ -37,8 +41,9 @@ pub fn main() !void {
 const std = @import("std");
 const engine = @import("engine");
 const core = engine.core;
-const rl = engine.rl;
+const rl = engine.raylib;
 const AssetsPlugin = engine.assets.Plugin;
 const PrefabPlugin = engine.prefabs.Plugin;
 
-const game_plugins = @import("plugins.zig");
+const game = @import("game");
+const game_plugins = game.plugins;

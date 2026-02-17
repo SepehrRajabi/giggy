@@ -167,5 +167,5 @@ fn randomVelocity(prng: *std.Random.Xoshiro256) Velocity {
 
 const std = @import("std");
 const engine = @import("engine");
-const rl = engine.rl;
+const rl = engine.raylib;
 const ecs = engine.ecs;

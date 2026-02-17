@@ -367,8 +367,9 @@ test "scheduler reports missing deps and cycles" {
 
 const std = @import("std");
 const mem = std.mem;
-const xmath = @import("../math.zig");
-const graph_mod = @import("../graph.zig");
+const engine = @import("engine");
+const xmath = engine.math;
+const graph_mod = engine.graph;
 
 const App = @import("app.zig").App;
 const Time = @import("app.zig").Time;
