@@ -13,7 +13,7 @@ pub fn main() !void {
     const grid_width: usize = 20;
     const grid_height: usize = 15;
 
-    var pf = try path_finding.Pathfinder.initDefault(
+    var pf = try Pathfinder.initDefault(
         allocator,
         grid_width,
         grid_height,
@@ -133,6 +133,8 @@ pub fn main() !void {
 
 const std = @import("std");
 const engine = @import("engine");
-const rl = engine.rl;
+const xmath = engine.math;
+const rl = engine.raylib;
 const path_finding = engine.path_finding;
-const Vec2 = path_finding.Vec2;
+const Pathfinder = path_finding.Pathfinder;
+const Vec2 = xmath.Vec2;

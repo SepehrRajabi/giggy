@@ -1,11 +1,3 @@
-const std = @import("std");
-const math = @import("math.zig");
-const heuristics = @import("path_finding_heuristics.zig");
-
-pub const Vec2 = math.Vec2;
-pub const GridPos = heuristics.GridPos;
-pub const Heuristic = heuristics.Heuristic;
-
 const Node = struct {
     pos: GridPos,
     g: u32 = 0,
@@ -210,3 +202,11 @@ pub const Pathfinder = struct {
     }
 };
 
+const std = @import("std");
+const engine = @import("engine");
+const xmath = engine.math;
+const heuristics = @import("path_finding_heuristics.zig");
+
+const Vec2 = xmath.Vec2;
+const GridPos = heuristics.GridPos;
+const Heuristic = heuristics.Heuristic;
