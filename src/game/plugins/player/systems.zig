@@ -1,8 +1,8 @@
 pub fn playerInputSystem(app: *core.App) !void {
     const world_ref = &app.world;
     const player_entity = app.getResource(resources.Player).?.entity;
-    const vel = world_ref.get(transform.VelocityView, player_entity).?;
-    const rot = world_ref.get(transform.RotationView, player_entity).?;
+    const vel = world_ref.get(components.transform.VelocityView, player_entity).?;
+    const rot = world_ref.get(components.transform.RotationView, player_entity).?;
     var x: f32 = 0;
     var y: f32 = 0;
 
@@ -57,16 +57,16 @@ pub fn playerInputSystem(app: *core.App) !void {
 
 pub fn playerSpawnSystem(app: *core.App) !void {
     var it_player = app.world.query(&[_]type{
-        player_comp.Player,
-        transform.Position,
-        transform.Rotation,
-        world_comp.Room,
+        components.player.Player,
+        components.transform.Position,
+        components.transform.Rotation,
+        components.world.Room,
     });
     while (it_player.next()) |_| {
-        const pos = it_player.get(transform.PositionView);
-        const rot = it_player.get(transform.RotationView);
-        const player_view = it_player.get(player_comp.PlayerView);
-        const room = it_player.get(world_comp.RoomView);
+        const pos = it_player.get(components.transform.PositionView);
+        const rot = it_player.get(components.transform.RotationView);
+        const player_view = it_player.get(components.player.PlayerView);
+        const room = it_player.get(components.world.RoomView);
         if (!player_view.just_spawned.*) continue;
 
         const desired_spawn_id = player_view.spawn_id.*;
@@ -77,11 +77,11 @@ pub fn playerSpawnSystem(app: *core.App) !void {
         var found_y: f32 = 0;
         var found = false;
 
-        var it_spawn = app.world.query(&[_]type{ world_comp.SpawnPoint, transform.Position, world_comp.Room });
+        var it_spawn = app.world.query(&[_]type{ components.world.SpawnPoint, components.transform.Position, components.world.Room });
         while (it_spawn.next()) |_| {
-            const sp = it_spawn.get(world_comp.SpawnPointView);
-            const sp_pos = it_spawn.get(transform.PositionView);
-            const sp_room = it_spawn.get(world_comp.RoomView);
+            const sp = it_spawn.get(components.world.SpawnPointView);
+            const sp_pos = it_spawn.get(components.transform.PositionView);
+            const sp_room = it_spawn.get(components.world.RoomView);
             if (sp_room.id.* != room.id.*) continue;
 
             if (best_fallback_id == null or sp.id.* < best_fallback_id.?) {
@@ -119,8 +119,6 @@ const core = engine.core;
 const rl = engine.raylib;
 
 const game = @import("game");
-const player_comp = game.components.player;
-const transform = game.components.transform;
-const world_comp = game.components.world;
+const components = game.components;
 const resources = game.plugins.player.resources;
 const fade_resources = game.plugins.fade.resources;

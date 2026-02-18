@@ -4,20 +4,20 @@ pub fn updateLocomotionAnimationSystem(app: *core.App) !void {
     const current_room_id = room_mgr.current orelse return;
 
     var it = app.world.query(&[_]type{
-        animation.Animation,
-        transform.Velocity,
-        animation.LocomotionAnimSet,
-        animation.LocomotionAnimState,
-        render.Model3D,
-        world.Room,
+        components.animation.Animation,
+        components.transform.Velocity,
+        components.animation.LocomotionAnimSet,
+        components.animation.LocomotionAnimState,
+        components.render.Model3D,
+        components.world.Room,
     });
     while (it.next()) |_| {
-        const av = it.get(animation.AnimationView);
-        const vv = it.get(transform.VelocityView);
-        const set = it.get(animation.LocomotionAnimSetView);
-        const state = it.get(animation.LocomotionAnimStateView);
-        const mv = it.get(render.Model3DView);
-        const rm = it.get(world.RoomView);
+        const av = it.get(components.animation.AnimationView);
+        const vv = it.get(components.transform.VelocityView);
+        const set = it.get(components.animation.LocomotionAnimSetView);
+        const state = it.get(components.animation.LocomotionAnimStateView);
+        const mv = it.get(components.render.Model3DView);
+        const rm = it.get(components.world.RoomView);
 
         if (rm.id.* != current_room_id) continue;
 
@@ -59,10 +59,10 @@ pub fn updateLocomotionAnimationSystem(app: *core.App) !void {
 pub fn update3DModelAnimationsSystem(app: *core.App) !void {
     const time = app.getResource(core.Time).?;
     const assets = app.getResource(engine.assets.AssetManager).?;
-    var it = app.world.query(&[_]type{ render.Model3D, animation.Animation });
+    var it = app.world.query(&[_]type{ components.render.Model3D, components.animation.Animation });
     while (it.next()) |_| {
-        const mv = it.get(render.Model3DView);
-        const am = it.get(animation.AnimationView);
+        const mv = it.get(components.render.Model3DView);
+        const am = it.get(components.animation.AnimationView);
 
         const model = assets.models.getPtr(mv.name.*).?;
         const frame_count = @as(usize, @intCast(model.animations[am.index.*].frameCount));
@@ -88,16 +88,16 @@ pub fn render3DModelsSystem(app: *core.App) !void {
     const room_mgr = app.getResource(level_resources.RoomManager).?;
     const current_room_id = room_mgr.current orelse return;
     var it = app.world.query(&[_]type{
-        render.Model3D,
-        transform.Rotation,
-        render.RenderInto,
-        world.Room,
+        components.render.Model3D,
+        components.transform.Rotation,
+        components.render.RenderInto,
+        components.world.Room,
     });
     while (it.next()) |_| {
-        const mv = it.get(render.Model3DView);
-        const rv = it.get(transform.RotationView);
-        const into = it.getAuto(render.RenderInto).into;
-        const rm = it.get(world.RoomView);
+        const mv = it.get(components.render.Model3DView);
+        const rv = it.get(components.transform.RotationView);
+        const into = it.getAuto(components.render.RenderInto).into;
+        const rm = it.get(components.world.RoomView);
 
         if (rm.id.* != current_room_id) continue;
 
@@ -138,12 +138,12 @@ pub fn collectRenderablesSystem(app: *core.App) !void {
     const current_room_id = room_mgr.current orelse return;
     const list = &renderables_list.list;
 
-    var it_texture = app.world.query(&[_]type{ transform.Position, render.WidthHeight, render.Texture, world.Room });
+    var it_texture = app.world.query(&[_]type{ components.transform.Position, components.render.WidthHeight, components.render.Texture, components.world.Room });
     while (it_texture.next()) |_| {
-        const pos = it_texture.get(transform.PositionView);
-        const wh = it_texture.get(render.WidthHeightView);
-        const t = it_texture.get(render.TextureView);
-        const rm = it_texture.get(world.RoomView);
+        const pos = it_texture.get(components.transform.PositionView);
+        const wh = it_texture.get(components.render.WidthHeightView);
+        const t = it_texture.get(components.render.TextureView);
+        const rm = it_texture.get(components.world.RoomView);
 
         if (rm.id.* != current_room_id) continue;
 
@@ -159,11 +159,11 @@ pub fn collectRenderablesSystem(app: *core.App) !void {
             .z_index = t.z_index.*,
         });
     }
-    var it_render = app.world.query(&[_]type{ transform.Position, render.RenderInto, world.Room });
+    var it_render = app.world.query(&[_]type{ components.transform.Position, components.render.RenderInto, components.world.Room });
     while (it_render.next()) |_| {
-        const pos = it_render.get(transform.PositionView);
-        const into = it_render.getAuto(render.RenderInto).into;
-        const rm = it_render.get(world.RoomView);
+        const pos = it_render.get(components.transform.PositionView);
+        const into = it_render.getAuto(components.render.RenderInto).into;
+        const rm = it_render.get(components.world.RoomView);
 
         if (rm.id.* != current_room_id) continue;
         const render_texture = render_targets.render_textures.get(into.*).?;
@@ -227,15 +227,15 @@ const camera3d = rl.Camera3D{
     .projection = rl.CAMERA_ORTHOGRAPHIC,
 };
 
-fn interpolatedPositionX(pos: transform.PositionView, alpha: f32) f32 {
+fn interpolatedPositionX(pos: components.transform.PositionView, alpha: f32) f32 {
     return engine.math.lerp(pos.prev_x.*, pos.x.*, alpha);
 }
 
-fn interpolatedPositionY(pos: transform.PositionView, alpha: f32) f32 {
+fn interpolatedPositionY(pos: components.transform.PositionView, alpha: f32) f32 {
     return engine.math.lerp(pos.prev_y.*, pos.y.*, alpha);
 }
 
-fn interpolatedRotation(rot: transform.RotationView, alpha: f32) f32 {
+fn interpolatedRotation(rot: components.transform.RotationView, alpha: f32) f32 {
     return engine.math.lerpAngleDeg(rot.prev_teta.*, rot.teta.*, alpha);
 }
 
@@ -256,10 +256,8 @@ const core = engine.core;
 const rl = engine.raylib;
 
 const game = @import("game");
-const animation = game.components.animation;
-const transform = game.components.transform;
-const render = game.components.render;
-const world = game.components.world;
+const components = game.components;
+
 const resources = game.plugins.render.resources;
 const camera_resources = game.plugins.camera.resources;
 const level_resources = game.plugins.level.resources;

@@ -10,7 +10,7 @@ pub const PrefabsFactory = struct {
         _ = cb;
         var room_mgr = app.getResource(resources.RoomManager).?;
         if (readRoomBounds(object)) |bounds| {
-            try room_mgr.setBounds(world.Room.init(room_ref).id, bounds);
+            try room_mgr.setBounds(resources.roomIdFromName(room_ref), bounds);
         }
     }
 
@@ -23,9 +23,6 @@ pub const PrefabsFactory = struct {
     ) !void {
         _ = gpa;
 
-        const room_mgr = app.getResource(resources.RoomManager).?;
-        const room_name = try room_mgr.own(room_ref);
-
         const x = valueToF32(object.object.get("x")).?;
         const y = valueToF32(object.object.get("y")).?;
         const spawn_id: u8 = readSpawnId(object) orelse 0;
@@ -34,7 +31,7 @@ pub const PrefabsFactory = struct {
         try cb.spawnBundle(e, SpawnPointBundle, .{
             .spawn = .{ .id = spawn_id },
             .pos = .{ .x = x, .y = y, .prev_x = x, .prev_y = y },
-            .room = .init(room_name),
+            .room = resources.roomFromName(room_ref),
         });
     }
 
@@ -47,9 +44,6 @@ pub const PrefabsFactory = struct {
     ) !void {
         _ = gpa;
 
-        const room_mgr = app.getResource(resources.RoomManager).?;
-        const room_name = try room_mgr.own(room_ref);
-
         const tp_room = valueToStr(object.object.get("name")).?;
         const x = valueToF32(object.object.get("x")).?;
         const y = valueToF32(object.object.get("y")).?;
@@ -58,11 +52,11 @@ pub const PrefabsFactory = struct {
 
         const e = app.world.reserveEntity();
         try cb.spawnBundle(e, DoorBundle, .{
-            .tp = .{ .room_id = world.Room.init(tp_room).id, .spawn_id = spawn_id },
+            .tp = .{ .room_id = resources.roomIdFromName(tp_room), .spawn_id = spawn_id },
             // Tiled rectangle objects use (x,y) as top-left; we store position as circle center.
             .pos = .{ .x = x + r, .y = y + r, .prev_x = x + r, .prev_y = y + r },
             .col = .{ .radius = r, .mask = 0 },
-            .room = .init(room_name),
+            .room = resources.roomFromName(room_ref),
         });
     }
 
@@ -74,9 +68,6 @@ pub const PrefabsFactory = struct {
         room_ref: []const u8,
     ) !void {
         _ = gpa;
-
-        const room_mgr = app.getResource(resources.RoomManager).?;
-        const room_name = try room_mgr.own(room_ref);
 
         const obj = switch (object) {
             .object => |o| o,
@@ -121,7 +112,7 @@ pub const PrefabsFactory = struct {
             .pos = .{ .x = x, .y = y, .prev_x = x, .prev_y = y },
             .wh = .{ .w = w, .h = h },
             .tex = .{ .name = owned_key, .z_index = z_index },
-            .room = .init(room_name),
+            .room = resources.roomFromName(room_ref),
         });
     }
 
@@ -133,9 +124,6 @@ pub const PrefabsFactory = struct {
         room_ref: []const u8,
     ) !void {
         _ = gpa;
-
-        const room_mgr = app.getResource(resources.RoomManager).?;
-        const room_name = try room_mgr.own(room_ref);
 
         const obj = switch (object) {
             .object => |o| o,
@@ -168,7 +156,7 @@ pub const PrefabsFactory = struct {
                     .y1 = base_y + next.y,
                     .mask = 1,
                 },
-                .room = .init(room_name),
+                .room = resources.roomFromName(room_ref),
             });
             prev = next;
         }
@@ -181,7 +169,7 @@ pub const PrefabsFactory = struct {
                 .y1 = base_y + first.y,
                 .mask = 1,
             },
-            .room = .init(room_name),
+            .room = resources.roomFromName(room_ref),
         });
     }
 };
@@ -370,28 +358,28 @@ fn valueToI16(value_opt: ?json.Value) ?i16 {
 }
 
 const DoorBundle = struct {
-    tp: world.Teleport,
-    pos: transform.Position,
-    col: collision.ColliderCircle,
-    room: world.Room,
+    tp: components.world.Teleport,
+    pos: components.transform.Position,
+    col: components.collision.ColliderCircle,
+    room: components.world.Room,
 };
 
 const SpawnPointBundle = struct {
-    spawn: world.SpawnPoint,
-    pos: transform.Position,
-    room: world.Room,
+    spawn: components.world.SpawnPoint,
+    pos: components.transform.Position,
+    room: components.world.Room,
 };
 
 const LayerBundle = struct {
-    pos: transform.Position,
-    wh: render.WidthHeight,
-    tex: render.Texture,
-    room: world.Room,
+    pos: components.transform.Position,
+    wh: components.render.WidthHeight,
+    tex: components.render.Texture,
+    room: components.world.Room,
 };
 
 const LineBundle = struct {
-    line: collision.ColliderLine,
-    room: world.Room,
+    line: components.collision.ColliderLine,
+    room: components.world.Room,
 };
 
 const Point = struct {
@@ -409,8 +397,5 @@ const assets = engine.assets;
 const ecs = engine.ecs;
 
 const game = @import("game");
-const transform = game.components.transform;
-const render = game.components.render;
-const collision = game.components.collision;
-const world = game.components.world;
+const components = game.components;
 const resources = game.plugins.level.resources;

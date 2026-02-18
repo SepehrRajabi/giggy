@@ -59,15 +59,15 @@ fn commitTeleport(app: *core.App, p: resources.ScreenFade.Pending) void {
     const room_mgr = app.getResource(level_resources.RoomManager).?;
     const player_entity = app.getResource(player_resources.Player).?.entity;
 
-    if (app.world.get(world.RoomView, player_entity)) |room| {
+    if (app.world.get(components.world.RoomView, player_entity)) |room| {
         room.id.* = p.room_id;
         room_mgr.current = p.room_id;
     }
-    if (app.world.get(player.PlayerView, player_entity)) |pl| {
+    if (app.world.get(components.player.PlayerView, player_entity)) |pl| {
         pl.just_spawned.* = true;
         pl.spawn_id.* = p.spawn_id;
     }
-    if (app.world.get(transform.VelocityView, player_entity)) |vel| {
+    if (app.world.get(components.transform.VelocityView, player_entity)) |vel| {
         vel.x.* = 0;
         vel.y.* = 0;
     }
@@ -80,11 +80,9 @@ const core = engine.core;
 const rl = engine.raylib;
 
 const game = @import("game");
+const components = game.components;
 const resources = game.plugins.fade.resources;
 const core_resources = game.plugins.core.resources;
 const level_resources = game.plugins.level.resources;
 const player_resources = game.plugins.player.resources;
 const render = game.plugins.render;
-const player = game.components.player;
-const transform = game.components.transform;
-const world = game.components.world;

@@ -15,10 +15,10 @@ pub fn updateDebugValuesSystem(app: *core.App) !void {
     try debug.setFmt("world.entities", "{d}", .{app.world.count()});
 
     if (app.getResource(player_resources.Player)) |player_res| {
-        if (app.world.get(transform.PositionView, player_res.entity)) |pos| {
+        if (app.world.get(components.transform.PositionView, player_res.entity)) |pos| {
             try debug.setFmt("player.pos", "{d:.1}, {d:.1}", .{ pos.x.*, pos.y.* });
         }
-        if (app.world.get(transform.RotationView, player_res.entity)) |rot| {
+        if (app.world.get(components.transform.RotationView, player_res.entity)) |rot| {
             try debug.setFmt("player.rot", "{d:.1}, {d:.1}", .{ rot.target_teta.*, rot.teta.* });
         }
     }
@@ -45,11 +45,11 @@ fn renderBoxes(app: *core.App) void {
     const assets = app.getResource(engine.assets.AssetManager).?;
     const room_mgr = app.getResource(level_resources.RoomManager).?;
     const current_room_id = room_mgr.current orelse return;
-    var it_texture = app.world.query(&[_]type{ transform.Position, render_comps.Texture, world.Room });
+    var it_texture = app.world.query(&[_]type{ components.transform.Position, components.render.Texture, components.world.Room });
     while (it_texture.next()) |_| {
-        const pos = it_texture.get(transform.PositionView);
-        const texture_name = it_texture.getAuto(render_comps.Texture).name;
-        const rm = it_texture.get(world.RoomView);
+        const pos = it_texture.get(components.transform.PositionView);
+        const texture_name = it_texture.getAuto(components.render.Texture).name;
+        const rm = it_texture.get(components.world.RoomView);
 
         if (rm.id.* != current_room_id) continue;
 
@@ -64,11 +64,11 @@ fn renderBoxes(app: *core.App) void {
         }, 4.0, rl.RED);
     }
     const render_targets = app.getResource(render_resources.RenderTargets).?;
-    var it_render = app.world.query(&[_]type{ transform.Position, render_comps.RenderInto, world.Room });
+    var it_render = app.world.query(&[_]type{ components.transform.Position, components.render.RenderInto, components.world.Room });
     while (it_render.next()) |_| {
-        const pos = it_render.get(transform.PositionView);
-        const into = it_render.getAuto(render_comps.RenderInto).into;
-        const rm = it_render.get(world.RoomView);
+        const pos = it_render.get(components.transform.PositionView);
+        const into = it_render.getAuto(components.render.RenderInto).into;
+        const rm = it_render.get(components.world.RoomView);
 
         if (rm.id.* != current_room_id) continue;
 
@@ -90,10 +90,10 @@ fn renderColliders(app: *core.App) void {
     const time = app.getResource(core.Time).?;
     const room_mgr = app.getResource(level_resources.RoomManager).?;
     const current_room_id = room_mgr.current orelse return;
-    var it = app.world.query(&[_]type{ collision.ColliderLine, world.Room });
+    var it = app.world.query(&[_]type{ components.collision.ColliderLine, components.world.Room });
     while (it.next()) |_| {
-        const line = it.get(collision.ColliderLineView);
-        const rm = it.get(world.RoomView);
+        const line = it.get(components.collision.ColliderLineView);
+        const rm = it.get(components.world.RoomView);
 
         if (rm.id.* != current_room_id) continue;
 
@@ -101,11 +101,11 @@ fn renderColliders(app: *core.App) void {
         const to: rl.Vector2 = .{ .x = line.x1.*, .y = line.y1.* };
         rl.DrawLineEx(from, to, 4.0, rl.GREEN);
     }
-    var circle_it = app.world.query(&[_]type{ transform.Position, collision.ColliderCircle, world.Room });
+    var circle_it = app.world.query(&[_]type{ components.transform.Position, components.collision.ColliderCircle, components.world.Room });
     while (circle_it.next()) |_| {
-        const pos = circle_it.get(transform.PositionView);
-        const col = circle_it.get(collision.ColliderCircleView);
-        const rm = circle_it.get(world.RoomView);
+        const pos = circle_it.get(components.transform.PositionView);
+        const col = circle_it.get(components.collision.ColliderCircleView);
+        const rm = circle_it.get(components.world.RoomView);
 
         if (rm.id.* != current_room_id) continue;
 
@@ -141,11 +141,11 @@ fn drawDebugValues(debug: *resources.DebugState, x: c_int, y: c_int, line_height
     }
 }
 
-fn interpolatedPositionX(pos: transform.PositionView, alpha: f32) f32 {
+fn interpolatedPositionX(pos: components.transform.PositionView, alpha: f32) f32 {
     return engine.math.lerp(pos.prev_x.*, pos.x.*, alpha);
 }
 
-fn interpolatedPositionY(pos: transform.PositionView, alpha: f32) f32 {
+fn interpolatedPositionY(pos: components.transform.PositionView, alpha: f32) f32 {
     return engine.math.lerp(pos.prev_y.*, pos.y.*, alpha);
 }
 
@@ -155,13 +155,10 @@ const rl = engine.raylib;
 const std = @import("std");
 
 const game = @import("game");
+const components = game.components;
 const resources = game.plugins.debug.resources;
 const core_resources = game.plugins.core.resources;
 const level_resources = game.plugins.level.resources;
 const render_resources = game.plugins.render.resources;
 const player_resources = game.plugins.player.resources;
 const render = game.plugins.render;
-const transform = game.components.transform;
-const collision = game.components.collision;
-const render_comps = game.components.render;
-const world = game.components.world;

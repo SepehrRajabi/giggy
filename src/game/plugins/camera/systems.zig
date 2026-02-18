@@ -4,7 +4,7 @@ pub fn cameraOnObjectSystem(app: *core.App) !void {
     const camera_state = app.getResource(resources.CameraState).?;
     const screen = app.getResource(core_resources.Screen).?;
     const room_mgr = app.getResource(level_resources.RoomManager).?;
-    const pos = app.world.get(transform.PositionView, player).?;
+    const pos = app.world.get(components.transform.PositionView, player).?;
 
     const w = @as(f32, @floatFromInt(screen.width));
     const h = @as(f32, @floatFromInt(screen.height));
@@ -36,8 +36,8 @@ const core = engine.core;
 const xmath = engine.math;
 
 const game = @import("game");
+const components = game.components;
 const resources = game.plugins.camera.resources;
 const core_resources = game.plugins.core.resources;
 const player_resources = game.plugins.player.resources;
 const level_resources = game.plugins.level.resources;
-const transform = game.components.transform;
