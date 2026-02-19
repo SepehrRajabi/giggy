@@ -26,7 +26,6 @@ const PQ = std.PriorityQueue(Node, pq_context, pq_context.compare);
 /// - `cell_size` controls how many world units each grid cell spans.
 /// - `grid` is a boolean array where `true` means walkable, `false` blocked.
 pub const Pathfinder = struct {
-    allocator: std.mem.Allocator,
     width: usize,
     height: usize,
     cell_size: f32,
@@ -54,35 +53,30 @@ pub const Pathfinder = struct {
     };
 
     pub fn init(
-        allocator: std.mem.Allocator,
         w: usize,
         h: usize,
         cell_size: f32,
+        grid: []bool,
         heuristic: Heuristic,
         directions: Directions,
     ) !Pathfinder {
         return .{
-            .allocator = allocator,
             .width = w,
             .height = h,
             .cell_size = cell_size,
-            .grid = try allocator.alloc(bool, w * h),
+            .grid = grid,
             .heuristic = heuristic,
             .directions = directions,
         };
     }
 
     pub fn initDefault(
-        allocator: std.mem.Allocator,
         w: usize,
         h: usize,
         cell_size: f32,
+        grid: []bool,
     ) !Pathfinder {
-        return Pathfinder.init(allocator, w, h, cell_size, .euclidean, all_directions);
-    }
-
-    pub fn deinit(self: *Pathfinder) void {
-        self.allocator.free(self.grid);
+        return Pathfinder.init(w, h, cell_size, grid, .euclidean, all_directions);
     }
 
     fn index(self: *const Pathfinder, p: GridPos) ?usize {
@@ -128,19 +122,19 @@ pub const Pathfinder = struct {
     /// Returns `null` if no path exists, otherwise a newly allocated slice of
     /// `Vec2` positions from start to end (inclusive). Caller owns the slice
     /// and must free it with the same allocator.
-    pub fn findPath(self: *Pathfinder, start: Vec2, end: Vec2) !?[]Vec2 {
+    pub fn findPath(self: *Pathfinder, allocator: mem.Allocator, start: Vec2, end: Vec2) !?[]Vec2 {
         const start_grid = self.toGrid(start);
         const end_grid = self.toGrid(end);
 
         if (!self.isWalkable(start_grid) or !self.isWalkable(end_grid)) return null;
 
-        var open_set = PQ.init(self.allocator, .{});
+        var open_set = PQ.init(allocator, .{});
         defer open_set.deinit();
 
-        var visited = std.AutoHashMap(GridPos, f32).init(self.allocator);
+        var visited = std.AutoHashMap(GridPos, f32).init(allocator);
         defer visited.deinit();
 
-        var came_from = std.AutoHashMap(GridPos, GridPos).init(self.allocator);
+        var came_from = std.AutoHashMap(GridPos, GridPos).init(allocator);
         defer came_from.deinit();
 
         try open_set.add(.{
@@ -154,7 +148,7 @@ pub const Pathfinder = struct {
             const current = open_set.remove();
 
             if (current.pos.x == end_grid.x and current.pos.y == end_grid.y) {
-                return self.reconstructPath(came_from, current.pos);
+                return self.reconstructPath(allocator, came_from, current.pos);
             }
 
             for (self.directions) |dir| {
@@ -188,6 +182,7 @@ pub const Pathfinder = struct {
 
     fn reconstructPath(
         self: *Pathfinder,
+        allocator: mem.Allocator,
         came_from: std.AutoHashMap(GridPos, GridPos),
         end_grid: GridPos,
     ) !?[]Vec2 {
@@ -201,7 +196,7 @@ pub const Pathfinder = struct {
         }
 
         // Allocate result slice.
-        var path = try self.allocator.alloc(Vec2, len);
+        var path = try allocator.alloc(Vec2, len);
 
         // Fill backwards, converting grid positions back to world space.
         var i: usize = len - 1;
@@ -219,6 +214,7 @@ pub const Pathfinder = struct {
 };
 
 const std = @import("std");
+const mem = std.mem;
 const engine = @import("engine");
 const xmath = engine.math;
 const heuristics = @import("path_finding_heuristics.zig");
