@@ -22,19 +22,13 @@ zig build examples
 
 ## What to work on
 
-The project roadmap lives in `ROADMAP.md`. If you are unsure where to help, pick something that aligns with:
-
-- Milestone 0 foundations or Milestone 1 resource life cycle.
-- Rendering direction experiments (true 3D world pass vs 2D + per-entity 3D).
-- Controller-first UX improvements (aim, focus navigation, input polish).
-
-If you want to take on a larger task, open an issue first to align on direction and scope.
+If you are unsure where to help, pick something that aligns with the roadmap (`ROADMAP.md`). 
 
 ## Code conventions
 
 - Prefer explicit APIs and clear data flow.
 - Favor readability over abstraction.
-- Keep gameplay simulation separate from presentation when possible.
+- Keep gameplay simulation separate from presentation.
 - If possible, add unit tests for bug fixes and new behavior.
 - If you touch Zig code, run `zig fmt` on the files you change.
 

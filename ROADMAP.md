@@ -63,59 +63,40 @@ Goal: author rooms quickly and iterate without code changes.
 - [x] Data-driven prefabs: enemies/props defined by data (stats, animations, hitboxes, drops).
 - [x] Room format (recommend: Tiled/LDtk): spawns, collision, waves, exits, rewards.
 - [x] Room manager: load/unload room entities; transitions; keep player persistent.
-- [ ] Game object plugins: colliders, spawners, etc.
+- [X] Game object plugins: colliders, spawners, etc.
 - [ ] Optional but high ROI: hot-reload JSON/data during runtime for fast iteration.
 
-### Milestone 2: Combat Vertical Slice (First Fun)
+### Milestone 2: Netcode + Multiplayer
 
-Goal: one room you can clear with good feel.
+Goal: playable 2-4 player online co-op with acceptable latency and stable sync.
 
-- [ ] Player verbs: move, dash (i-frames + cooldown), primary attack, special, cast/projectile.
-- [ ] Core combat components/systems:
-  - `Health`, `Damage`, `Faction/Team`
-  - `Hitbox`/`Hurtbox`
-  - `Invulnerable`, `Knockback`, `Status`
-- [ ] Minimal enemy AI loop: idle -> chase -> attack -> recover; spawn a few enemies.
-- [ ] Centralize hit resolution (events/commands) so combat is deterministic-ish and debuggable.
-- [ ] Controller-first:
-  - left-stick move, right-stick aim
-  - aim assist + target selection rules
-  - rumble + hit-stop as feedback events (presentation-only)
+- [ ] Lock simulation to fixed step and make deterministic (no frame-time input, avoid non-deterministic iteration).
+      ensure identical results across machines by using fixed dt and removing nondeterministic ordering/randomness.
+- [ ] Input pipeline: per-player input struct, input buffer, resend window, replay on correction.
+      record inputs with timestamps, keep a history, resend missed inputs, and re-simulate when corrections arrive.
+- [ ] Serialize ECS state for snapshots (component registry, stable IDs, endian-safe encoding).
+      define a stable component registry and endian-safe encoding so full/partial world states can be sent or restored.
+- [ ] Networking layer: UDP + reliability for critical messages; basic connect/handshake.
+      use UDP for low latency and add reliable delivery for handshakes, spawn/despawn, and session control.
+- [ ] Client-side prediction + server reconciliation; interpolation for remote entities.
+      predict local input immediately, accept server authority, and smooth remote motion with interpolation.
+- [ ] Join/leave flows: late-join snapshot, entity ownership, and cleanup on disconnect.
+      let new players sync from a snapshot and cleanly reclaim/erase entities on disconnect.
+- [ ] Debug tooling: netgraph, ping/jitter display, desync logging with checksums.
+      add visibility into network quality and detect divergence with periodic state hashes.
 
-### Milestone 3: Feel + Presentation
 
-- Camera: screenshake, subtle time dilation, hit-stop.
-- VFX: particles, trails, impact flashes; pooled/budgeted.
-- Audio: mix buses (SFX/music/ambience), layered hit sounds; controller rumble timing.
-- UI: health, resources, boons/rewards selection; fully controller navigable.
+### Milestone 3: Playable game, attack, hitbox, etc
 
-### Milestone 4: Progression + Content Scaling
+Goal: a short, complete playable loop with combat, feedback, and progression hooks.
 
-- Boons/modifiers system: clear stacking rules (add/mul/conditional), applied to abilities.
-- Save/load: meta progression, unlocks.
-- More enemies + elites + miniboss/boss patterns (state machines first; scripting later if needed).
-
-### Milestone 5: Scale/Performance Pass (As Needed)
-
-- Collision broadphase (grid/quadtree) to avoid O(N edges) checks per moving entity.
-- Rendering direction finalized:
-  - If Option A: keep one 3D world pass + 2D UI.
-  - If Option B: strictly budget RenderTexture usage and batch everything else.
-- System scheduling: explicit stages, profiling hooks, debug overlays.
-
-## Multiplayer Track (Only After Single-Player Is Fun)
-
-Step 1: local co-op (two players, same sim, shared camera) to force "multi-player-ready" design.
-
-Step 2: online co-op
-- Prefer server-authoritative initially:
-  - client-side prediction for local player movement/attacks
-  - server-driven enemies at first
-  - reconciliation + lag compensation where needed
-- If rollback is desired later:
-  - enforce determinism (fixed dt, careful float usage, reproducible RNG)
+- [ ] Core combat loop: basic weapon, attack input, and hit detection.
+- [ ] Hitboxes and hurtboxes: authoring, visualization, and collision rules.
+- [ ] Damage pipeline: health, invuln frames, knockback, death, respawn.
+- [ ] Enemies: one melee and one ranged enemy with simple AI.
+- [ ] Simple room objective: clear wave or defeat mini-boss to exit.
+- [ ] Minimal UI: health bar, ammo/energy, and objective text.
 
 ## Next Questions To Unblock Work
 
 - Visual direction: mostly-3D look (true 3D world) vs sprite-heavy?
-- Netcode preference: server-authoritative now, rollback later, or rollback from the start?
