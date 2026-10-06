@@ -1,17 +1,16 @@
-const ENEMY_RELEASE_DELTA_TICK = 100;
+const ENEMY_RELEASE_DELTA_TICK = 70;
 
 pub fn enemySpawnerSystem(app: *core.App) !void {
     const time_res = app.getResource(core.Time).?;
 
-    // spawn an enemy every 500 tick
-    if (time_res.tick % 500 != 0) return;
+    // spawn an enemy every 100 tick
+    if (time_res.tick % 100 != 0) return;
 
     var cb = try ecs.CommandBuffer.init(app.gpa);
     // TODO: here we ignored error!
     defer cb.flush(&app.world) catch unreachable;
 
     const render_targets = app.getResource(render_resources.RenderTargets).?;
-    const rt = try render_targets.load(64, 64);
     const assets_mgr = app.getResource(engine.assets.AssetManager).?;
 
     const loco_animset = blk: {
@@ -41,6 +40,7 @@ pub fn enemySpawnerSystem(app: *core.App) !void {
     };
     defer render_camera.deinit();
 
+    const rt = try render_targets.load(128, 128);
     const e = app.world.reserveEntity();
     try cb.spawn(e, .{
         components.enemy.Enemy{ .id = 1, .speed = 180.0, .state = .chase, .release_tick = 0 },
@@ -48,9 +48,10 @@ pub fn enemySpawnerSystem(app: *core.App) !void {
         components.transform.Velocity{ .x = 0, .y = 0 },
         components.collision.ColliderCircle{ .radius = 16.0, .mask = 1 },
         components.transform.Rotation{ .teta = 0, .prev_teta = 0, .target_teta = 0, .turn_speed_deg = 360.0 * 2 },
+        components.animation.Animation{ .index = 0, .frame = 0, .accum = 0, .speed = 0, .priority = 0 },
+        components.render.WidthHeight{ .w = 64, .h = 64 },
         components.render.Model3D{ .name = "skull", .render_texture = 0, .mesh = 0, .material = 1 },
         components.render.RenderInto{ .into = rt },
-        components.animation.Animation{ .index = 0, .frame = 0, .accum = 0, .speed = 0, .priority = 0 },
         loco_animset.value,
         skull_animset.value,
         render_camera.value,
@@ -206,18 +207,21 @@ pub fn updateAnimationSystem(app: *core.App) !void {
     // TODO: here we ignored error!
     defer cb.flush(&app.world) catch unreachable;
 
+    const time_res = app.getResource(core.Time).?;
     const room_mgr = app.getResource(level_resources.RoomManager) orelse return;
 
     var it = app.world.query(&[_]type{
         components.enemy.Enemy,
         components.animation.Animation,
         components.animation.SkullAnimSet,
+        components.render.WidthHeight,
         components.world.Room,
     });
     while (it.next()) |entity| {
         const enemy = it.get(components.enemy.EnemyView);
         const anim = it.get(components.animation.AnimationView);
         const set = it.get(components.animation.SkullAnimSetView);
+        const wh = it.get(components.render.WidthHeightView);
         const room = it.get(components.world.RoomView);
 
         if (room_mgr.current != room.id.*) continue;
@@ -234,6 +238,13 @@ pub fn updateAnimationSystem(app: *core.App) !void {
                 anim.priority.* = SKULL_ANIM_ATTACK_PRIORITY;
                 anim.index.* = set.attack.*;
                 anim.speed.* = set.attack_speed.*;
+
+                // scale model
+                const remaining = @as(f32, @floatFromInt(enemy.release_tick.* - time_res.tick));
+                const progress = 1.0 - remaining / @as(f32, @floatFromInt(ENEMY_RELEASE_DELTA_TICK));
+                const scaled = @min(64.0 + (94.0 - 64.0) * progress, 94.0);
+                wh.w.* = scaled;
+                wh.h.* = scaled;
             },
             .dead => {
                 if (anim.priority.* > SKULL_ANIM_DEAD_PRIORITY)
@@ -269,7 +280,7 @@ fn spawnShockwave(app: *core.App, cb: *ecs.CommandBuffer, pos: xmath.Vec2) !void
     };
     defer shockwave_camera.deinit();
 
-    const rt2 = try render_targets.load(512, 512);
+    const rt = try render_targets.load(512, 512);
     const e = app.world.reserveEntity();
     try cb.spawn(e, .{
         components.enemy.Shockwave{
@@ -281,7 +292,7 @@ fn spawnShockwave(app: *core.App, cb: *ecs.CommandBuffer, pos: xmath.Vec2) !void
         components.render.WidthHeight{ .w = 0, .h = 0 },
         components.render.Alpha{ .alpha = 1.0 },
         components.render.ZIndex{ .value = -5 },
-        components.render.RenderInto{ .into = rt2 },
+        components.render.RenderInto{ .into = rt },
         shockwave_camera.value,
         components.transform.Position{
             .x = pos.x,
