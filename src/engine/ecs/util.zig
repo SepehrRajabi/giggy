@@ -41,6 +41,7 @@ pub fn hashTypeName(comptime T: type) u32 {
     const name = @typeName(T);
     var hasher = std.hash.Wyhash.init(0);
     hasher.update(name[0..]);
+    @setEvalBranchQuota(4096);
     return @truncate(hasher.final());
 }
 

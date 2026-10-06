@@ -3,6 +3,7 @@ pub const Animation = struct {
     speed: f32,
     frame: usize,
     accum: f32,
+    count: u8 = 0,
     priority: i16,
 };
 
@@ -12,6 +13,7 @@ pub const AnimationView = struct {
     speed: *f32,
     frame: *usize,
     accum: *f32,
+    count: *u8,
     priority: *i16,
 };
 

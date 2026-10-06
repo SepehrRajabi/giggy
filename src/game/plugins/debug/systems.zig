@@ -10,6 +10,7 @@ pub fn updateDebugValuesSystem(app: *core.App) !void {
     if (!debug.enabled) return;
 
     const time = app.getResource(core.Time).?;
+    try debug.setFmt("time.tick", "{d}", .{time.tick});
     try debug.setFmt("time.dt", "{d:.4}", .{time.dt});
     try debug.setFmt("time.alpha", "{d:.2}", .{time.alpha});
     try debug.setFmt("world.entities", "{d}", .{app.world.count()});

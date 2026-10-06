@@ -71,6 +71,15 @@ pub const WidthHeightView = struct {
     h: *f32,
 };
 
+pub const Alpha = struct {
+    alpha: f32,
+};
+
+pub const AlphaView = struct {
+    pub const Of = Alpha;
+    alpha: *f32,
+};
+
 pub const RenderInto = struct {
     into: u32,
 };

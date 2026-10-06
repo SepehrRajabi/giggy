@@ -3,7 +3,7 @@ pub const Plugin = struct {
         _ = self;
         _ = try app.insertResource(resources.ChasePath, .init(app.gpa));
         const render_targets = app.getResource(render_resources.RenderTargets).?;
-        const rt = try render_targets.load(96, 96);
+        const rt = try render_targets.load(64, 64);
         const assets_mgr = app.getResource(engine.assets.AssetManager).?;
 
         const loco_animset = blk: {
@@ -35,7 +35,7 @@ pub const Plugin = struct {
         defer render_camera.deinit();
 
         _ = try app.world.spawn(.{
-            components.enemy.Enemy{ .id = 1, .speed = 180.0, .state = .chase },
+            components.enemy.Enemy{ .id = 1, .speed = 180.0, .state = .chase, .release_tick = 0 },
             components.transform.Position{ .x = 750, .y = 400, .prev_x = 200, .prev_y = 200 },
             components.transform.Velocity{ .x = 0, .y = 0 },
             components.collision.ColliderCircle{ .radius = 16.0, .mask = 1 },
@@ -53,6 +53,7 @@ pub const Plugin = struct {
         try app.addSystem(.fixed_update, systems.enemyAISystem, .{
             .provides = &.{"input", "ai"},
         });
+        try app.addSystem(.update, systems.shockwaveExpandSystem, .{});
         try app.addSystem(.update, systems.updateAnimationSystem, .{
             .provides = &.{"animation"},
             .after_all_labels = &.{"ai"},

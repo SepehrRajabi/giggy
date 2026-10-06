@@ -1,9 +1,9 @@
 {
     "skull": {
         "attack": 0,
-        "attack_speed": 60.0,
+        "attack_speed": 50.0,
         "dead": 10,
-        "dead_speed": 60.0
+        "dead_speed": 50.0
     },
     "locomotion": {
         "witch": {

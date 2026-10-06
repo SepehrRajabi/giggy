@@ -1,4 +1,10 @@
+const ENEMY_RELEASE_DELTA_TICK = 100;
+
 pub fn enemyAISystem(app: *core.App) !void {
+    var cb = try ecs.CommandBuffer.init(app.gpa);
+    // TODO: here we ignored error!
+    defer cb.flush(&app.world) catch unreachable;
+
     const time_res = app.getResource(core.Time).?;
     const chase_path_res = app.getResource(resource.ChasePath).?;
     const debug_res = app.getResource(debug.resources.DebugState).?;
@@ -118,8 +124,17 @@ pub fn enemyAISystem(app: *core.App) !void {
             .charge => {
                 vel.x.* = 0;
                 vel.y.* = 0;
+                if (enemy.release_tick.* == 0) {
+                    enemy.release_tick.* = time_res.tick + ENEMY_RELEASE_DELTA_TICK;
+                } else if (time_res.tick > enemy.release_tick.*) {
+                    // release now!
+                    enemy.state.* = .dead;
+                    try spawnShockwave(app, &cb, .{ .x = pos.x.*, .y = pos.y.* });
+                }
             },
-            .dead => {},
+            .dead => {
+                // nothing to do for now
+            },
         }
     }
 }
@@ -128,6 +143,10 @@ pub const SKULL_ANIM_ATTACK_PRIORITY = 20;
 pub const SKULL_ANIM_DEAD_PRIORITY = 100;
 
 pub fn updateAnimationSystem(app: *core.App) !void {
+    var cb = try ecs.CommandBuffer.init(app.gpa);
+    // TODO: here we ignored error!
+    defer cb.flush(&app.world) catch unreachable;
+
     const room_mgr = app.getResource(level_resources.RoomManager) orelse return;
 
     var it = app.world.query(&[_]type{
@@ -136,7 +155,7 @@ pub fn updateAnimationSystem(app: *core.App) !void {
         components.animation.SkullAnimSet,
         components.world.Room,
     });
-    while (it.next()) |_| {
+    while (it.next()) |entity| {
         const enemy = it.get(components.enemy.EnemyView);
         const anim = it.get(components.animation.AnimationView);
         const set = it.get(components.animation.SkullAnimSetView);
@@ -161,17 +180,99 @@ pub fn updateAnimationSystem(app: *core.App) !void {
                 if (anim.priority.* > SKULL_ANIM_DEAD_PRIORITY)
                     continue;
                 anim.priority.* = SKULL_ANIM_DEAD_PRIORITY;
-                anim.index.* = set.attack.*;
-                anim.speed.* = set.attack_speed.*;
+                if (anim.index.* != set.dead.*) {
+                    anim.index.* = set.dead.*;
+                    anim.speed.* = set.dead_speed.*;
+                    anim.accum.* = 0;
+                    anim.count.* = 0;
+                }
+                if (anim.count.* > 0) {
+                    try cb.despawn(entity);
+                }
             },
         }
     }
 }
 
+fn spawnShockwave(app: *core.App, cb: *ecs.CommandBuffer, pos: xmath.Vec2) !void {
+    // TODO: we are reading external files whenever
+    // spawning a shockwave. fix this!
+    const assets_mgr = app.getResource(engine.assets.AssetManager).?;
+    const render_targets = app.getResource(render_resources.RenderTargets).?;
+
+    // spawn a shockwave
+    const shockwave_camera = blk: {
+        const val = assets_mgr.configValuePath(
+            "render_camera",
+            &.{ "shockwave" },
+        ).?;
+        break :blk try json.parseFromValue(components.render.Model3DRenderCamera, app.gpa, val, .{});
+    };
+    defer shockwave_camera.deinit();
+
+    const rt2 = try render_targets.load(512, 512);
+    const e = app.world.reserveEntity();
+    try cb.spawn(e, .{
+
+        components.enemy.Shockwave{ .size_limit = 300, .size = 30, .speed = 1.0, .ttl = 160 },
+        components.render.Sprite{ .name = "shockwave", .index = 0 },
+        components.render.WidthHeight{ .w = 0, .h = 0 },
+        components.render.Alpha{ .alpha = 1.0 },
+        components.render.ZIndex{ .value = -5 },
+        components.render.RenderInto{ .into = rt2 },
+        shockwave_camera.value,
+        components.transform.Position{ .x = pos.x, .y = pos.y, .prev_x = pos.x, .prev_y = pos.y },
+        components.animation.Animation{ .index = 0, .speed = 50.0, .frame = 0, .accum = 0, .priority = 0 },
+        level_resources.roomFromName("level1"),
+    });
+}
+
+pub fn shockwaveExpandSystem(app: *core.App) !void {
+    const time_res = app.getResource(core.Time).?;
+    const render_targets = app.getResource(render_resources.RenderTargets).?;
+
+    var cb = try ecs.CommandBuffer.init(app.gpa);
+    // TODO: here we ignored error!
+    defer cb.flush(&app.world) catch unreachable;
+
+    var it = app.world.query(&[_]type{
+        components.enemy.Shockwave,
+        components.render.WidthHeight,
+        components.render.Alpha,
+    });
+    while (it.next()) |entity| {
+        const shockwave = it.get(components.enemy.ShockwaveView);
+        const wh = it.get(components.render.WidthHeightView);
+        const alpha = it.get(components.render.AlphaView);
+        if (shockwave.size.* < shockwave.size_limit.*) {
+            shockwave.size.* += shockwave.speed.*;
+            wh.w.* = shockwave.size.*;
+            wh.h.* = shockwave.size.*;
+        } else {
+            shockwave.size.* = shockwave.size_limit.*;
+            wh.w.* = shockwave.size.*;
+            wh.h.* = shockwave.size.*;
+            // fade out
+            const delta: f32 = 1.0 / @as(f32, @floatFromInt(shockwave.ttl.*)) * time_res.alpha;
+            if (alpha.alpha.* > 0) {
+                alpha.alpha.* = @max(alpha.alpha.* - delta, 0);
+            } else {
+                alpha.alpha.* = 0;
+                if (it.getOrNull(components.render.RenderIntoView)) |target| {
+                    _ = render_targets.unload(target.into.*);
+                }
+                try cb.despawn(entity);
+            }
+        }
+    }
+}
+
 const std = @import("std");
+const json = std.json;
 
 const engine = @import("engine");
 const core = engine.core;
+const ecs = engine.ecs;
 const xmath = engine.math;
 const rl = engine.raylib;
 const path_finding = engine.algo.path_finding;
@@ -181,5 +282,6 @@ const components = game.components;
 const resource = game.plugins.enemy.resources;
 const level_resources = game.plugins.level.resources;
 const player_resources = game.plugins.player.resources;
+const render_resources = game.plugins.render.resources;
 const debug = game.plugins.debug;
 

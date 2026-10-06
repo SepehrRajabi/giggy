@@ -82,7 +82,9 @@ pub fn update3DModelAnimationsSystem(app: *core.App) !void {
         const max_acc = @as(f32, @floatFromInt(frame_count)) / am.speed.*;
 
         am.accum.* += time.dt;
-        while (am.accum.* > max_acc) : (am.accum.* -= max_acc) {}
+        while (am.accum.* > max_acc) : (am.accum.* -= max_acc) {
+            am.count.* +%= 1;
+        }
         const new_current = @as(usize, @intFromFloat(am.accum.* * am.speed.*)) % frame_count;
         am.frame.* = new_current;
     }
@@ -253,6 +255,7 @@ pub fn collectRenderablesSystem(app: *core.App) !void {
             .y = interpolatedPositionY(pos, time.alpha),
             .w = wh.w.*,
             .h = wh.h.*,
+            .alpha = 1.0,
             .flip_h = false,
             .texture = texture.*,
             .z_index = z_index,
@@ -281,11 +284,17 @@ pub fn collectRenderablesSystem(app: *core.App) !void {
             h = wh.h.*;
         }
 
+        var alpha: f32 = 1.0;
+        if (it_render.getAutoOrNull(components.render.Alpha)) |v| {
+            alpha = v.alpha.*;
+        }
+
         try list.append(renderables_list.gpa, renderables.Renderable{
             .x = interpolatedPositionX(pos, time.alpha) - h / 2.0,
             .y = interpolatedPositionY(pos, time.alpha) - w / 2.0,
             .w = w,
             .h = h,
+            .alpha = alpha,
             .flip_h = true,
             .texture = render_texture.texture,
             .z_index = z_index,
@@ -316,7 +325,8 @@ pub fn renderRenderablesSystem(app: *core.App) !void {
             .width = r.w,
             .height = r.h,
         };
-        rl.DrawTexturePro(r.texture, src, dst, .{ .x = 0, .y = 0}, 0, rl.WHITE);
+        const tint = rl.Color{.r = 255, .g = 255, .b = 255, .a = @intFromFloat(255.0 * r.alpha)};
+        rl.DrawTexturePro(r.texture, src, dst, .{ .x = 0, .y = 0}, 0, tint);
         // rl.DrawTextureRec(r.texture, src, .{ .x = r.x, .y = r.y }, rl.WHITE);
     }
 }
