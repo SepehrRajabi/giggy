@@ -1,4 +1,3 @@
-const ENEMY_RELEASE_DELTA_TICK = 70;
 
 pub fn enemySpawnerSystem(app: *core.App) !void {
     const time_res = app.getResource(core.Time).?;
@@ -59,6 +58,8 @@ pub fn enemySpawnerSystem(app: *core.App) !void {
         level_resources.roomFromName("level1"),
     });
 }
+
+const ENEMY_RELEASE_DELTA_TICK = 70;
 
 pub fn enemyAISystem(app: *core.App) !void {
     var cb = try ecs.CommandBuffer.init(app.gpa);
@@ -208,6 +209,7 @@ pub fn updateAnimationSystem(app: *core.App) !void {
     defer cb.flush(&app.world) catch unreachable;
 
     const time_res = app.getResource(core.Time).?;
+    const assets_mgr = app.getResource(engine.assets.AssetManager).?;
     const room_mgr = app.getResource(level_resources.RoomManager) orelse return;
 
     var it = app.world.query(&[_]type{
@@ -237,12 +239,16 @@ pub fn updateAnimationSystem(app: *core.App) !void {
                     continue;
                 anim.priority.* = SKULL_ANIM_ATTACK_PRIORITY;
                 anim.index.* = set.attack.*;
-                anim.speed.* = set.attack_speed.*;
+
+                const model = assets_mgr.models.get("skull").?;
+                const count = model.animations[anim.index.*].keyframeCount * set.attack_count.*;
+                const window = time_res.fixed_dt * ENEMY_RELEASE_DELTA_TICK;
+                anim.speed.* = @as(f32, @floatFromInt(count)) / window;
 
                 // scale model
                 const remaining = @as(f32, @floatFromInt(enemy.release_tick.* - time_res.tick));
                 const progress = 1.0 - remaining / @as(f32, @floatFromInt(ENEMY_RELEASE_DELTA_TICK));
-                const scaled = @min(64.0 + (94.0 - 64.0) * progress, 94.0);
+                const scaled = @min(64.0 + (94.0 - 64.0) * (progress * (1 + time_res.alpha * progress)), 94.0);
                 wh.w.* = scaled;
                 wh.h.* = scaled;
             },

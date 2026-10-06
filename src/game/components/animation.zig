@@ -50,7 +50,7 @@ pub const LocomotionAnimSetView = struct {
 
 pub const SkullAnimSet = struct {
     attack: usize,
-    attack_speed: f32,
+    attack_count: u8,
     dead: usize,
     dead_speed: f32,
 };
@@ -58,7 +58,7 @@ pub const SkullAnimSet = struct {
 pub const SkullAnimSetView = struct {
     pub const Of = SkullAnimSet;
     attack: *usize,
-    attack_speed: *f32,
+    attack_count: *u8,
     dead: *usize,
     dead_speed: *f32,
 };
