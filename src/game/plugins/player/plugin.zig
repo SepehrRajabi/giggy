@@ -32,7 +32,7 @@ pub const Plugin = struct {
             components.transform.Rotation{ .teta = 0, .prev_teta = 0, .target_teta = 0, .turn_speed_deg = 360.0 * 3 },
             components.render.Model3D{ .name = "witch", .render_texture = 0, .mesh = 0, .material = 2 },
             components.render.RenderInto{ .into = rt },
-            components.animation.Animation{ .index = 0, .frame = 0, .acc = 0, .speed = 0 },
+            components.animation.Animation{ .index = 0, .frame = 0, .accum = 0, .speed = 0, .priority = 0 },
             loco_animset.value,
             render_camera.value,
             components.animation.LocomotionAnimState{ .moving = false },
@@ -58,7 +58,7 @@ pub const Plugin = struct {
             components.render.RenderInto{ .into = rt2 },
             shockwave_camera.value,
             components.transform.Position{ .x = 250, .y = 250, .prev_x = 250, .prev_y = 250 },
-            components.animation.Animation{ .index = 0, .speed = 50.0, .frame = 0, .acc = 0 },
+            components.animation.Animation{ .index = 0, .speed = 50.0, .frame = 0, .accum = 0, .priority = 0 },
             level_resources.roomFromName("level1"),
         });
         _ = shockwave;

@@ -15,6 +15,15 @@ pub const Plugin = struct {
         };
         defer loco_animset.deinit();
 
+        const skull_animset = blk: {
+            const val = assets_mgr.configValuePath(
+                "animations",
+                &.{ "skull" },
+            ).?;
+            break :blk try json.parseFromValue(components.animation.SkullAnimSet, app.gpa, val, .{});
+        };
+        defer skull_animset.deinit();
+
         const render_camera = blk: {
             const val = assets_mgr.configValuePath(
                 "render_camera",
@@ -22,6 +31,7 @@ pub const Plugin = struct {
             ).?;
             break :blk try json.parseFromValue(components.render.Model3DRenderCamera, app.gpa, val, .{});
         };
+
         defer render_camera.deinit();
 
         _ = try app.world.spawn(.{
@@ -32,15 +42,20 @@ pub const Plugin = struct {
             components.transform.Rotation{ .teta = 0, .prev_teta = 0, .target_teta = 0, .turn_speed_deg = 360.0 * 2 },
             components.render.Model3D{ .name = "skull", .render_texture = 0, .mesh = 0, .material = 1 },
             components.render.RenderInto{ .into = rt },
-            components.animation.Animation{ .index = 0, .frame = 0, .acc = 0, .speed = 0 },
+            components.animation.Animation{ .index = 0, .frame = 0, .accum = 0, .speed = 0, .priority = 0 },
             loco_animset.value,
+            skull_animset.value,
             render_camera.value,
             components.animation.LocomotionAnimState{ .moving = false },
             level_resources.roomFromName("level1"),
         });
 
         try app.addSystem(.fixed_update, systems.enemyAISystem, .{
-            .provides = &.{"input"},
+            .provides = &.{"input", "ai"},
+        });
+        try app.addSystem(.update, systems.updateAnimationSystem, .{
+            .provides = &.{"animation"},
+            .after_all_labels = &.{"ai"},
         });
     }
 };

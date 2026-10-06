@@ -124,6 +124,50 @@ pub fn enemyAISystem(app: *core.App) !void {
     }
 }
 
+pub const SKULL_ANIM_ATTACK_PRIORITY = 20;
+pub const SKULL_ANIM_DEAD_PRIORITY = 100;
+
+pub fn updateAnimationSystem(app: *core.App) !void {
+    const room_mgr = app.getResource(level_resources.RoomManager) orelse return;
+
+    var it = app.world.query(&[_]type{
+        components.enemy.Enemy,
+        components.animation.Animation,
+        components.animation.SkullAnimSet,
+        components.world.Room,
+    });
+    while (it.next()) |_| {
+        const enemy = it.get(components.enemy.EnemyView);
+        const anim = it.get(components.animation.AnimationView);
+        const set = it.get(components.animation.SkullAnimSetView);
+        const room = it.get(components.world.RoomView);
+
+        if (room_mgr.current != room.id.*) continue;
+
+        switch (enemy.state.*) {
+            .chase => {
+                if (anim.priority.* > 0)
+                    continue;
+                anim.priority.* = 0;
+            },
+            .charge => {
+                if (anim.priority.* > SKULL_ANIM_ATTACK_PRIORITY)
+                    continue;
+                anim.priority.* = SKULL_ANIM_ATTACK_PRIORITY;
+                anim.index.* = set.attack.*;
+                anim.speed.* = set.attack_speed.*;
+            },
+            .dead => {
+                if (anim.priority.* > SKULL_ANIM_DEAD_PRIORITY)
+                    continue;
+                anim.priority.* = SKULL_ANIM_DEAD_PRIORITY;
+                anim.index.* = set.attack.*;
+                anim.speed.* = set.attack_speed.*;
+            },
+        }
+    }
+}
+
 const std = @import("std");
 
 const engine = @import("engine");

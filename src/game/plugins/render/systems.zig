@@ -1,4 +1,6 @@
 
+pub const LOCOMOTION_ANIM_PRIORITY = 0;
+
 pub fn updateLocomotionAnimationSystem(app: *core.App) !void {
     const room_mgr = app.getResource(level_resources.RoomManager).?;
     const current_room_id = room_mgr.current orelse return;
@@ -18,6 +20,7 @@ pub fn updateLocomotionAnimationSystem(app: *core.App) !void {
         const rm = it.get(components.world.RoomView);
 
         if (rm.id.* != current_room_id) continue;
+        if (av.priority.* > LOCOMOTION_ANIM_PRIORITY) continue;
 
         const speed = std.math.sqrt(vv.x.* * vv.x.* + vv.y.* * vv.y.*);
         const start = set.move_start.*;
@@ -59,9 +62,9 @@ pub fn updateSpriteAnimationSystem(app: *core.App) !void {
         const frame_count = @as(usize, sprites.len);
         const max_acc = @as(f32, @floatFromInt(frame_count)) / am.speed.*;
 
-        am.acc.* += time.dt;
-        while (am.acc.* > max_acc) : (am.acc.* -= max_acc) {}
-        const new_current = @as(usize, @intFromFloat(am.acc.* * am.speed.*)) % frame_count;
+        am.accum.* += time.dt;
+        while (am.accum.* > max_acc) : (am.accum.* -= max_acc) {}
+        const new_current = @as(usize, @intFromFloat(am.accum.* * am.speed.*)) % frame_count;
         am.frame.* = new_current;
     }
 }
@@ -78,9 +81,9 @@ pub fn update3DModelAnimationsSystem(app: *core.App) !void {
         const frame_count = @as(usize, @intCast(model.animations[am.index.*].keyframeCount));
         const max_acc = @as(f32, @floatFromInt(frame_count)) / am.speed.*;
 
-        am.acc.* += time.dt;
-        while (am.acc.* > max_acc) : (am.acc.* -= max_acc) {}
-        const new_current = @as(usize, @intFromFloat(am.acc.* * am.speed.*)) % frame_count;
+        am.accum.* += time.dt;
+        while (am.accum.* > max_acc) : (am.accum.* -= max_acc) {}
+        const new_current = @as(usize, @intFromFloat(am.accum.* * am.speed.*)) % frame_count;
         am.frame.* = new_current;
     }
 }
