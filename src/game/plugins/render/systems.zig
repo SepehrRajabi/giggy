@@ -1,6 +1,5 @@
 
 pub fn updateLocomotionAnimationSystem(app: *core.App) !void {
-    const assets = app.getResource(engine.assets.AssetManager).?;
     const room_mgr = app.getResource(level_resources.RoomManager).?;
     const current_room_id = room_mgr.current orelse return;
 
@@ -9,7 +8,6 @@ pub fn updateLocomotionAnimationSystem(app: *core.App) !void {
         components.transform.Velocity,
         components.animation.LocomotionAnimSet,
         components.animation.LocomotionAnimState,
-        components.render.Model3D,
         components.world.Room,
     });
     while (it.next()) |_| {
@@ -17,7 +15,6 @@ pub fn updateLocomotionAnimationSystem(app: *core.App) !void {
         const vv = it.get(components.transform.VelocityView);
         const set = it.get(components.animation.LocomotionAnimSetView);
         const state = it.get(components.animation.LocomotionAnimStateView);
-        const mv = it.get(components.render.Model3DView);
         const rm = it.get(components.world.RoomView);
 
         if (rm.id.* != current_room_id) continue;
@@ -30,22 +27,11 @@ pub fn updateLocomotionAnimationSystem(app: *core.App) !void {
 
         const new_anim = if (state.moving.*) set.run.* else set.idle.*;
         if (new_anim != av.index.*) {
-            const model = assets.models.getPtr(mv.name.*).?;
-            const old_frames = @as(f32, @floatFromInt(model.animations[av.index.*].keyframeCount));
-            const prev_speed = @max(av.speed.*, 0.001);
-            const old_max_acc = old_frames / prev_speed;
-            const phase = if (old_max_acc > 0) av.acc.* / old_max_acc else 0;
-
             av.index.* = new_anim;
-
-            const new_frames_count = @as(usize, @intCast(model.animations[av.index.*].keyframeCount));
             const base_speed = set.base_speed.*;
             const ref = @max(set.run_speed_ref.*, 0.001);
             const scale = std.math.clamp(speed / ref, set.speed_scale_min.*, set.speed_scale_max.*);
             av.speed.* = base_speed * scale;
-            const new_max_acc = @as(f32, @floatFromInt(new_frames_count)) / av.speed.*;
-            av.acc.* = phase * new_max_acc;
-            av.frame.* = @as(usize, @intFromFloat(av.acc.* * av.speed.*)) % new_frames_count;
         } else if (state.moving.*) {
             const base_speed = set.base_speed.*;
             const ref = @max(set.run_speed_ref.*, 0.001);
@@ -100,7 +86,6 @@ pub fn update3DModelAnimationsSystem(app: *core.App) !void {
 }
 
 pub fn renderSpritesSystem(app: *core.App) !void {
-    // const time = app.getResource(core.Time).?;
     const assets_mgr = app.getResource(engine.assets.AssetManager).?;
     const render_targets = app.getResource(resources.RenderTargets).?;
     const room_mgr = app.getResource(level_resources.RoomManager).?;

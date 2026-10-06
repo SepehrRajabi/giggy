@@ -86,7 +86,7 @@ pub fn enemyAISystem(app: *core.App) !void {
                         };
                         break :blk v.abs();
                     };
-                    if (dist < 10.0) path.*.head += 1;
+                    if (dist < 32.0) path.*.head += 1;
 
                     if (path.head >= path.points.?.len) break :outer null;
                     break :outer path.points.?[path.head];

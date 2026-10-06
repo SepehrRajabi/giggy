@@ -3,7 +3,7 @@ pub const Plugin = struct {
         _ = self;
         _ = try app.insertResource(resources.ChasePath, .init(app.gpa));
         const render_targets = app.getResource(render_resources.RenderTargets).?;
-        const rt = try render_targets.load(64, 64);
+        const rt = try render_targets.load(96, 96);
         const assets_mgr = app.getResource(engine.assets.AssetManager).?;
 
         const loco_animset = blk: {
