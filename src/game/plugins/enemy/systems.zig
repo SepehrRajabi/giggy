@@ -1,7 +1,6 @@
 const ENEMY_RELEASE_DELTA_TICK = 100;
 
 pub fn enemySpawnerSystem(app: *core.App) !void {
-
     const time_res = app.getResource(core.Time).?;
 
     // spawn an enemy every 500 tick
@@ -273,16 +272,30 @@ fn spawnShockwave(app: *core.App, cb: *ecs.CommandBuffer, pos: xmath.Vec2) !void
     const rt2 = try render_targets.load(512, 512);
     const e = app.world.reserveEntity();
     try cb.spawn(e, .{
-
-        components.enemy.Shockwave{ .size_limit = 300, .size = 30, .speed = 1.0, .ttl = 160 },
+        components.enemy.Shockwave{
+            .size_init = 32,
+            .size_limit = 256,
+            .ttl = 2.0,
+        },
         components.render.Sprite{ .name = "shockwave", .index = 0 },
         components.render.WidthHeight{ .w = 0, .h = 0 },
         components.render.Alpha{ .alpha = 1.0 },
         components.render.ZIndex{ .value = -5 },
         components.render.RenderInto{ .into = rt2 },
         shockwave_camera.value,
-        components.transform.Position{ .x = pos.x, .y = pos.y, .prev_x = pos.x, .prev_y = pos.y },
-        components.animation.Animation{ .index = 0, .speed = 50.0, .frame = 0, .accum = 0, .priority = 0 },
+        components.transform.Position{
+            .x = pos.x,
+            .y = pos.y,
+            .prev_x = pos.x,
+            .prev_y = pos.y,
+        },
+        components.animation.Animation{
+            .index = 0,
+            .speed = 250.0,
+            .frame = 0,
+            .accum = 0,
+            .priority = 0,
+        },
         level_resources.roomFromName("level1"),
     });
 }
@@ -304,8 +317,10 @@ pub fn shockwaveExpandSystem(app: *core.App) !void {
         const shockwave = it.get(components.enemy.ShockwaveView);
         const wh = it.get(components.render.WidthHeightView);
         const alpha = it.get(components.render.AlphaView);
-        if (shockwave.size.* < shockwave.size_limit.*) {
-            shockwave.size.* += shockwave.speed.*;
+
+        if (shockwave.size.* < shockwave.size_limit.* - 1.0) {
+            shockwave.accum.* += time_res.dt;
+            shockwave.size.* = projectileScale(shockwave.accum.*, shockwave.size_init.*, shockwave.size_limit.*, 7.0);
             wh.w.* = shockwave.size.*;
             wh.h.* = shockwave.size.*;
         } else {
@@ -313,7 +328,7 @@ pub fn shockwaveExpandSystem(app: *core.App) !void {
             wh.w.* = shockwave.size.*;
             wh.h.* = shockwave.size.*;
             // fade out
-            const delta: f32 = 1.0 / @as(f32, @floatFromInt(shockwave.ttl.*)) * time_res.alpha;
+            const delta: f32 = time_res.dt / shockwave.ttl.*;
             if (alpha.alpha.* > 0) {
                 alpha.alpha.* = @max(alpha.alpha.* - delta, 0);
             } else {
@@ -325,6 +340,10 @@ pub fn shockwaveExpandSystem(app: *core.App) !void {
             }
         }
     }
+}
+
+fn projectileScale(t: f32, min_scale: f32, max_scale: f32, growth: f32) f32 {
+    return max_scale - (max_scale - min_scale) * @exp(-growth * t);
 }
 
 const std = @import("std");

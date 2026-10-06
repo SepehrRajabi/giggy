@@ -20,16 +20,18 @@ pub const EnemyView = struct {
 };
 
 pub const Shockwave = struct {
-    speed: f32,
-    size: f32,
+    size: f32 = 0,
+    size_init: f32,
     size_limit: f32,
-    ttl: u16,
+    ttl: f32,
+    accum: f32 = 0,
 };
 
 pub const ShockwaveView = struct {
     pub const Of = Shockwave;
-    speed: *f32,
     size: *f32,
+    size_init: *f32,
     size_limit: *f32,
-    ttl: *u16,
+    ttl: *f32,
+    accum: *f32,
 };
