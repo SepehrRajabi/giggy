@@ -1,12 +1,14 @@
 pub const ColliderCircle = struct {
     radius: f32,
     mask: u64,
+    mass: f32,
 };
 
 pub const ColliderCircleView = struct {
     pub const Of = ColliderCircle;
     radius: *f32,
     mask: *u64,
+    mass: *f32,
 };
 
 pub const ColliderLine = struct {

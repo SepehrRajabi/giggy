@@ -55,7 +55,7 @@ pub const PrefabsFactory = struct {
             .tp = .{ .room_id = resources.roomIdFromName(tp_room), .spawn_id = spawn_id },
             // Tiled rectangle objects use (x,y) as top-left; we store position as circle center.
             .pos = .{ .x = x + r, .y = y + r, .prev_x = x + r, .prev_y = y + r },
-            .col = .{ .radius = r, .mask = 0 },
+            .col = .{ .radius = r, .mask = 0, .mass = 1.0 },
             .room = resources.roomFromName(room_ref),
         });
     }

@@ -45,7 +45,7 @@ pub fn enemySpawnerSystem(app: *core.App) !void {
         components.enemy.Enemy{ .id = 1, .speed = 180.0, .state = .chase, .release_tick = 0 },
         components.transform.Position{ .x = 750, .y = 400, .prev_x = 200, .prev_y = 200 },
         components.transform.Velocity{ .x = 0, .y = 0 },
-        components.collision.ColliderCircle{ .radius = 16.0, .mask = 1 },
+        components.collision.ColliderCircle{ .radius = 16.0, .mask = 1, .mass = 1.0 },
         components.transform.Rotation{ .teta = 0, .prev_teta = 0, .target_teta = 0, .turn_speed_deg = 360.0 * 2 },
         components.animation.Animation{ .index = 0, .frame = 0, .accum = 0, .speed = 0, .priority = 0 },
         components.render.WidthHeight{ .w = 64, .h = 64 },
@@ -74,6 +74,7 @@ pub fn enemyAISystem(app: *core.App) !void {
 
     const player_pos = app.world.get(components.transform.PositionView, player_res.entity) orelse return;
     const player_room = app.world.get(components.world.RoomView, player_res.entity) orelse return;
+    const player_col = app.world.get(components.collision.ColliderCircleView, player_res.entity);
 
     const bounds = room_mgr.getBounds(player_room.id.*) orelse return;
     const grid = room_mgr.getGrid(player_room.id.*) orelse return;
@@ -170,16 +171,19 @@ pub fn enemyAISystem(app: *core.App) !void {
                     vel.y.* = 0;
                 }
 
-                const dist = blk: {
-                    const v = xmath.Vec2{
-                        .x = pos.x.* - player_pos.x.*,
-                        .y = pos.y.* - player_pos.y.*,
-                    };
-                    break :blk v.abs();
-                };
-                if (dist < 64.0) {
-                    enemy.state.* = .charge;
-                    continue :state .charge;
+                if (player_col != null) {
+                    if (it.getOrNull(components.collision.ColliderCircleView)) |enemy_col| blk: {
+                        if (player_col.?.mask.* & enemy_col.mask.* == 0)
+                            break :blk;
+                        if (!rl.CheckCollisionCircles(
+                            .{ .x = player_pos.x.*, .y = player_pos.y.* },
+                            player_col.?.radius.*,
+                            .{ .x = pos.x.*, .y = pos.y.* },
+                            enemy_col.radius.*,
+                        )) break :blk;
+                        enemy.state.* = .charge;
+                        continue :state .charge;
+                    }
                 }
             },
             .charge => {
@@ -292,7 +296,7 @@ fn spawnShockwave(app: *core.App, cb: *ecs.CommandBuffer, pos: xmath.Vec2) !void
         components.enemy.Shockwave{
             .size_init = 32,
             .size_limit = 256,
-            .ttl = 2.0,
+            .ttl = 1.0,
         },
         components.render.Sprite{ .name = "shockwave", .index = 0 },
         components.render.WidthHeight{ .w = 0, .h = 0 },

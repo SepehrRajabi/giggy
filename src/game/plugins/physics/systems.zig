@@ -30,11 +30,78 @@ pub fn updateRotationsSystem(app: *core.App) !void {
 }
 
 pub fn colliderRigidBodySystem(app: *core.App) !void {
+    try circleCircleCollision(app);
     try circleLineCollision(app);
 }
 
+fn circleCircleCollision(app: *core.App) !void {
+    var it = app.world.query(&[_]type{
+        components.transform.Position,
+        components.collision.ColliderCircle,
+        components.world.Room,
+    });
+    while (it.next()) |entity| {
+        const pos = it.get(components.transform.PositionView);
+        const col = it.get(components.collision.ColliderCircleView);
+        const room = it.get(components.world.RoomView);
+
+        const pos_v = xmath.Vec2{.x = pos.x.*, .y = pos.y.*};
+        if (col.mask.* == 0) continue;
+
+        var it2 = app.world.query(&[_]type{
+            components.transform.Position,
+            components.collision.ColliderCircle,
+            components.world.Room,
+        });
+        while (it2.next()) |entity2| {
+            if (entity == entity2) continue;
+
+            const pos2 = it2.get(components.transform.PositionView);
+            const col2 = it2.get(components.collision.ColliderCircleView);
+            const room2 = it2.get(components.world.RoomView);
+
+            const pos2_v = xmath.Vec2{.x = pos2.x.*, .y = pos2.y.*};
+
+            if (col2.mask.* == 0) continue;
+            if (room.id.* != room2.id.*) continue;
+            if ((col.mask.* & col2.mask.*) == 0) continue;
+
+            if (!rl.CheckCollisionCircles(
+                pos_v.asRl(),
+                col.radius.*,
+                pos2_v.asRl(),
+                col2.radius.*,
+            )) continue;
+
+            const dist = pos_v.sub(pos2_v);
+            const dist_abs = dist.abs();
+            const least_dist = col.radius.* + col2.radius.*;
+            const push_abs = least_dist - dist_abs;
+
+            const pos_pushed_v = pos_v.add(
+                dist.normalize()
+                    .scale(push_abs * col2.mass.* / (col.mass.* + col2.mass.*))
+            );
+            const pos2_pushed_v = pos2_v.add(
+                dist.normalize()
+                    .scale(-push_abs * col.mass.* / (col.mass.* + col2.mass.*))
+            );
+
+            pos.x.* = pos_pushed_v.x;
+            pos.y.* = pos_pushed_v.y;
+
+            pos2.x.* = pos2_pushed_v.x;
+            pos2.y.* = pos2_pushed_v.y;
+        }
+    }
+}
+
 fn circleLineCollision(app: *core.App) !void {
-    var it = app.world.query(&[_]type{ components.transform.Position, components.collision.ColliderCircle, components.world.Room });
+    var it = app.world.query(&[_]type{
+        components.transform.Position,
+        components.collision.ColliderCircle,
+        components.world.Room,
+    });
     while (it.next()) |_| {
         const pos = it.get(components.transform.PositionView);
         const col = it.get(components.collision.ColliderCircleView);
@@ -49,7 +116,10 @@ fn circleLineCollision(app: *core.App) !void {
 }
 
 fn pushFromEdges(world_ref: *ecs.World, pos: *xmath.Vec2, r: f32, mask: u64, room_id: u32) void {
-    var it = world_ref.query(&[_]type{ components.collision.ColliderLine, components.world.Room });
+    var it = world_ref.query(&[_]type{
+        components.collision.ColliderLine,
+        components.world.Room,
+    });
     while (it.next()) |_| {
         const line = it.get(components.collision.ColliderLineView);
         const room = it.get(components.world.RoomView);
@@ -67,6 +137,8 @@ fn pushFromEdges(world_ref: *ecs.World, pos: *xmath.Vec2, r: f32, mask: u64, roo
         pos.* = pos.*.add(dist);
     }
 }
+
+const std = @import("std");
 
 const engine = @import("engine");
 const core = engine.core;
