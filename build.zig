@@ -84,7 +84,7 @@ pub fn build(b: *std.Build) void {
             exe.root_module.addLibraryPath(.{ .cwd_relative = b.pathJoin(&.{ prefix, "lib" }) });
             exe.root_module.linkSystemLibrary("raylib", .{ .use_pkg_config = .no });
         } else {
-        exe.root_module.linkSystemLibrary("raylib", .{});
+            exe.root_module.linkSystemLibrary("raylib", .{});
         }
     } else {
         exe.root_module.addIncludePath(b.path("third_party/raylib/include/"));
@@ -95,9 +95,7 @@ pub fn build(b: *std.Build) void {
 
     const run_cmd = b.addRunArtifact(exe);
     run_cmd.step.dependOn(b.getInstallStep());
-    if (b.args) |args| {
-        run_cmd.addArgs(args);
-    }
+    run_cmd.addPassthruArgs();
 
     const run_step = b.step("run", "Run the app");
     run_step.dependOn(&run_cmd.step);
