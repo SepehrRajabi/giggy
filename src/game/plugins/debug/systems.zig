@@ -10,6 +10,7 @@ pub fn updateDebugValuesSystem(app: *core.App) !void {
     if (!debug.enabled) return;
 
     const time = app.getResource(core.Time).?;
+    try debug.setFmt("time.tick", "{d}", .{time.tick});
     try debug.setFmt("time.dt", "{d:.4}", .{time.dt});
     try debug.setFmt("time.alpha", "{d:.2}", .{time.alpha});
     try debug.setFmt("world.entities", "{d}", .{app.world.count()});
@@ -47,7 +48,11 @@ fn renderBoxes(app: *core.App) void {
     const assets = app.getResource(engine.assets.AssetManager).?;
     const room_mgr = app.getResource(level_resources.RoomManager).?;
     const current_room_id = room_mgr.current orelse return;
-    var it_texture = app.world.query(&[_]type{ components.transform.Position, components.render.Texture, components.world.Room });
+    var it_texture = app.world.query(&[_]type{
+        components.transform.Position,
+        components.render.Texture,
+        components.world.Room,
+    });
     while (it_texture.next()) |_| {
         const pos = it_texture.get(components.transform.PositionView);
         const texture_name = it_texture.getAuto(components.render.Texture).name;
@@ -58,13 +63,20 @@ fn renderBoxes(app: *core.App) void {
         const texture = assets.textures.getPtr(texture_name.*).?;
         const x = interpolatedPositionX(pos, time.alpha);
         const y = interpolatedPositionY(pos, time.alpha);
+        var w: f32 = @floatFromInt(texture.width);
+        var h: f32 = @floatFromInt(texture.height);
+        if (it_texture.getOrNull(components.render.WidthHeightView)) |wh| {
+            w = wh.w.*;
+            h = wh.h.*;
+        }
         rl.DrawRectangleLinesEx(rl.Rectangle{
             .x = x,
             .y = y,
-            .width = @floatFromInt(texture.width),
-            .height = @floatFromInt(texture.height),
+            .width = w,
+            .height = h,
         }, 4.0, rl.RED);
     }
+
     const render_targets = app.getResource(render_resources.RenderTargets).?;
     var it_render = app.world.query(&[_]type{ components.transform.Position, components.render.RenderInto, components.world.Room });
     while (it_render.next()) |_| {
@@ -75,8 +87,12 @@ fn renderBoxes(app: *core.App) void {
         if (rm.id.* != current_room_id) continue;
 
         const render_texture = render_targets.render_textures.get(into.*).?;
-        const w: f32 = @floatFromInt(render_texture.texture.width);
-        const h: f32 = @floatFromInt(render_texture.texture.height);
+        var w: f32 = @floatFromInt(render_texture.texture.width);
+        var h: f32 = @floatFromInt(render_texture.texture.height);
+        if (it_render.getOrNull(components.render.WidthHeightView)) |wh| {
+            w = wh.w.*;
+            h = wh.h.*;
+        }
         const x = interpolatedPositionX(pos, time.alpha);
         const y = interpolatedPositionY(pos, time.alpha);
         rl.DrawRectangleLinesEx(rl.Rectangle{

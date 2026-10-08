@@ -3,6 +3,7 @@ pub const Renderable = struct {
     y: f32,
     w: f32,
     h: f32,
+    alpha: f32,
     texture: rl.Texture,
     flip_h: bool,
     z_index: i16,

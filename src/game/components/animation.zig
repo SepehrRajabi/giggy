@@ -2,7 +2,9 @@ pub const Animation = struct {
     index: usize,
     speed: f32,
     frame: usize,
-    acc: f32,
+    accum: f32,
+    count: u8 = 0,
+    priority: i16,
 };
 
 pub const AnimationView = struct {
@@ -10,7 +12,9 @@ pub const AnimationView = struct {
     index: *usize,
     speed: *f32,
     frame: *usize,
-    acc: *f32,
+    accum: *f32,
+    count: *u8,
+    priority: *i16,
 };
 
 pub const LocomotionAnimSet = struct {
@@ -42,6 +46,21 @@ pub const LocomotionAnimSetView = struct {
     move_stop: *f32,
     speed_scale_min: *f32,
     speed_scale_max: *f32,
+};
+
+pub const SkullAnimSet = struct {
+    attack: usize,
+    attack_count: u8,
+    dead: usize,
+    dead_speed: f32,
+};
+
+pub const SkullAnimSetView = struct {
+    pub const Of = SkullAnimSet;
+    attack: *usize,
+    attack_count: *u8,
+    dead: *usize,
+    dead_speed: *f32,
 };
 
 pub const LocomotionAnimState = struct {

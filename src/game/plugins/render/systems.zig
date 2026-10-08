@@ -1,5 +1,7 @@
+
+pub const LOCOMOTION_ANIM_PRIORITY = 0;
+
 pub fn updateLocomotionAnimationSystem(app: *core.App) !void {
-    const assets = app.getResource(engine.assets.AssetManager).?;
     const room_mgr = app.getResource(level_resources.RoomManager).?;
     const current_room_id = room_mgr.current orelse return;
 
@@ -8,7 +10,6 @@ pub fn updateLocomotionAnimationSystem(app: *core.App) !void {
         components.transform.Velocity,
         components.animation.LocomotionAnimSet,
         components.animation.LocomotionAnimState,
-        components.render.Model3D,
         components.world.Room,
     });
     while (it.next()) |_| {
@@ -16,10 +17,10 @@ pub fn updateLocomotionAnimationSystem(app: *core.App) !void {
         const vv = it.get(components.transform.VelocityView);
         const set = it.get(components.animation.LocomotionAnimSetView);
         const state = it.get(components.animation.LocomotionAnimStateView);
-        const mv = it.get(components.render.Model3DView);
         const rm = it.get(components.world.RoomView);
 
         if (rm.id.* != current_room_id) continue;
+        if (av.priority.* > LOCOMOTION_ANIM_PRIORITY) continue;
 
         const speed = std.math.sqrt(vv.x.* * vv.x.* + vv.y.* * vv.y.*);
         const start = set.move_start.*;
@@ -29,22 +30,11 @@ pub fn updateLocomotionAnimationSystem(app: *core.App) !void {
 
         const new_anim = if (state.moving.*) set.run.* else set.idle.*;
         if (new_anim != av.index.*) {
-            const model = assets.models.getPtr(mv.name.*).?;
-            const old_frames = @as(f32, @floatFromInt(model.animations[av.index.*].keyframeCount));
-            const prev_speed = @max(av.speed.*, 0.001);
-            const old_max_acc = old_frames / prev_speed;
-            const phase = if (old_max_acc > 0) av.acc.* / old_max_acc else 0;
-
             av.index.* = new_anim;
-
-            const new_frames_count = @as(usize, @intCast(model.animations[av.index.*].keyframeCount));
             const base_speed = set.base_speed.*;
             const ref = @max(set.run_speed_ref.*, 0.001);
             const scale = std.math.clamp(speed / ref, set.speed_scale_min.*, set.speed_scale_max.*);
             av.speed.* = base_speed * scale;
-            const new_max_acc = @as(f32, @floatFromInt(new_frames_count)) / av.speed.*;
-            av.acc.* = phase * new_max_acc;
-            av.frame.* = @as(usize, @intFromFloat(av.acc.* * av.speed.*)) % new_frames_count;
         } else if (state.moving.*) {
             const base_speed = set.base_speed.*;
             const ref = @max(set.run_speed_ref.*, 0.001);
@@ -53,6 +43,29 @@ pub fn updateLocomotionAnimationSystem(app: *core.App) !void {
         } else {
             av.speed.* = set.base_speed.*;
         }
+    }
+}
+
+pub fn updateSpriteAnimationSystem(app: *core.App) !void {
+    const time = app.getResource(core.Time).?;
+    const assets = app.getResource(engine.assets.AssetManager).?;
+
+    var it = app.world.query(&[_]type{
+        components.render.Sprite,
+        components.animation.Animation,
+    });
+    while (it.next()) |_| {
+        const sp = it.get(components.render.SpriteView);
+        const am = it.get(components.animation.AnimationView);
+
+        const sprites = assets.sprites.getPtr(sp.name.*).?;
+        const frame_count = @as(usize, sprites.len);
+        const max_acc = @as(f32, @floatFromInt(frame_count)) / am.speed.*;
+
+        am.accum.* += time.dt;
+        while (am.accum.* > max_acc) : (am.accum.* -= max_acc) {}
+        const new_current = @as(usize, @intFromFloat(am.accum.* * am.speed.*)) % frame_count;
+        am.frame.* = new_current;
     }
 }
 
@@ -68,10 +81,78 @@ pub fn update3DModelAnimationsSystem(app: *core.App) !void {
         const frame_count = @as(usize, @intCast(model.animations[am.index.*].keyframeCount));
         const max_acc = @as(f32, @floatFromInt(frame_count)) / am.speed.*;
 
-        am.acc.* += time.dt;
-        while (am.acc.* > max_acc) : (am.acc.* -= max_acc) {}
-        const new_current = @as(usize, @intFromFloat(am.acc.* * am.speed.*)) % frame_count;
+        am.accum.* += time.dt;
+        while (am.accum.* > max_acc) : (am.accum.* -= max_acc) {
+            am.count.* +%= 1;
+        }
+        const new_current = @as(usize, @intFromFloat(am.accum.* * am.speed.*)) % frame_count;
         am.frame.* = new_current;
+    }
+}
+
+pub fn renderSpritesSystem(app: *core.App) !void {
+    const assets_mgr = app.getResource(engine.assets.AssetManager).?;
+    const render_targets = app.getResource(resources.RenderTargets).?;
+    const room_mgr = app.getResource(level_resources.RoomManager).?;
+    const current_room_id = room_mgr.current orelse return;
+    var it = app.world.query(&[_]type{
+        components.render.Sprite,
+        components.render.RenderInto,
+        components.world.Room,
+    });
+    while (it.next()) |_| {
+        const sp = it.get(components.render.SpriteView);
+        const into = it.getAuto(components.render.RenderInto).into;
+        const rm = it.get(components.world.RoomView);
+
+        if (rm.id.* != current_room_id) continue;
+
+        const index = if (it.getOrNull(components.animation.AnimationView)) |anim|
+            anim.frame.*
+        else
+            0;
+        const sprite = assets_mgr.sprites.get(sp.name.*).?;
+        const render_texture = render_targets.render_textures.get(into.*).?;
+
+        rl.BeginTextureMode(render_texture);
+        rl.ClearBackground(rl.BLANK);
+
+        if (it.getOrNull(components.render.Model3DRenderCameraView)) |cam| {
+            var camera3d = DEFAULT_RENDER_CAMERA;
+
+            camera3d.position.x = cam.pos_x.*;
+            camera3d.position.y = cam.pos_y.*;
+            camera3d.position.z = cam.pos_z.*;
+
+            camera3d.target.x = cam.target_x.*;
+            camera3d.target.y = cam.target_y.*;
+            camera3d.target.z = cam.target_z.*;
+
+            camera3d.fovy = cam.fovy.*;
+
+            var plane_model = assets_mgr.models.get("plane").?;
+            plane_model.model.materials[0].maps[rl.MATERIAL_MAP_DIFFUSE].texture = sprite[index];
+
+            rl.BeginMode3D(camera3d);
+            rl.DrawModel(plane_model.model, .{ .x = 0, .y = 0, .z = 0 }, 1, rl.WHITE);
+            rl.EndMode3D();
+        } else {
+            const src = rl.Rectangle{
+                .x = 0,
+                .y = 0,
+                .width = @floatFromInt(sprite[index].width),
+                .height = @floatFromInt(-sprite[index].height),
+            };
+            const dst = rl.Rectangle{
+                .x = 0,
+                .y = 0,
+                .width = @floatFromInt(render_texture.texture.width),
+                .height = @floatFromInt(render_texture.texture.height),
+            };
+            rl.DrawTexturePro(sprite[index], src, dst, .{ .x = 0, .y = 0}, 0, rl.WHITE);
+        }
+
+        rl.EndTextureMode();
     }
 }
 
@@ -102,6 +183,18 @@ pub fn render3DModelsSystem(app: *core.App) !void {
 
         rl.BeginTextureMode(render_texture);
         rl.ClearBackground(rl.BLANK);
+        var camera3d = DEFAULT_RENDER_CAMERA;
+        if (it.getOrNull(components.render.Model3DRenderCameraView)) |cam| {
+            camera3d.position.x = cam.pos_x.*;
+            camera3d.position.y = cam.pos_y.*;
+            camera3d.position.z = cam.pos_z.*;
+
+            camera3d.target.x = cam.target_x.*;
+            camera3d.target.y = cam.target_y.*;
+            camera3d.target.z = cam.target_z.*;
+
+            camera3d.fovy = cam.fovy.*;
+        }
         rl.BeginMode3D(camera3d);
         if (it.getOrNull(components.animation.AnimationView)) |am| {
             rl.UpdateModelAnimation(
@@ -112,8 +205,8 @@ pub fn render3DModelsSystem(app: *core.App) !void {
         }
         rl.DrawModelEx(
             model.model,
-            rl.Vector3{ .x = 0, .y = 0, .z = 0 },
-            rl.Vector3{ .x = 0, .y = 1, .z = 0 },
+            rl.Vector3{ .x = 0, .y = 0.1, .z = 0 },
+            rl.Vector3{ .x = 0, .y = 1.5, .z = 0 },
             rotation,
             rl.Vector3{ .x = 1, .y = 1, .z = 1 },
             rl.WHITE,
@@ -139,11 +232,18 @@ pub fn collectRenderablesSystem(app: *core.App) !void {
     const current_room_id = room_mgr.current orelse return;
     const list = &renderables_list.list;
 
-    var it_texture = app.world.query(&[_]type{ components.transform.Position, components.render.WidthHeight, components.render.Texture, components.world.Room });
+    // Normal env textures
+    var it_texture = app.world.query(&[_]type{
+        components.transform.Position,
+        components.render.WidthHeight,
+        components.render.Texture,
+        components.world.Room,
+    });
     while (it_texture.next()) |_| {
         const pos = it_texture.get(components.transform.PositionView);
         const wh = it_texture.get(components.render.WidthHeightView);
         const t = it_texture.get(components.render.TextureView);
+        const z_index = if (it_texture.getAutoOrNull(components.render.ZIndex)) |z| z.value.* else 0;
         const rm = it_texture.get(components.world.RoomView);
 
         if (rm.id.* != current_room_id) continue;
@@ -155,31 +255,49 @@ pub fn collectRenderablesSystem(app: *core.App) !void {
             .y = interpolatedPositionY(pos, time.alpha),
             .w = wh.w.*,
             .h = wh.h.*,
+            .alpha = 1.0,
             .flip_h = false,
             .texture = texture.*,
-            .z_index = t.z_index.*,
+            .z_index = z_index,
         });
     }
-    var it_render = app.world.query(&[_]type{ components.transform.Position, components.render.RenderInto, components.world.Room });
+
+    // Render renderables targets
+    var it_render = app.world.query(&[_]type{
+        components.transform.Position,
+        components.render.RenderInto,
+        components.world.Room,
+    });
     while (it_render.next()) |_| {
         const pos = it_render.get(components.transform.PositionView);
         const into = it_render.getAuto(components.render.RenderInto).into;
+        const z_index = if (it_render.getAutoOrNull(components.render.ZIndex)) |z| z.value.* else 0;
         const rm = it_render.get(components.world.RoomView);
 
         if (rm.id.* != current_room_id) continue;
         const render_texture = render_targets.render_textures.get(into.*).?;
 
-        const w = @as(f32, @floatFromInt(render_texture.texture.width));
-        const h = @as(f32, @floatFromInt(render_texture.texture.height));
+        var w = @as(f32, @floatFromInt(render_texture.texture.width));
+        var h = @as(f32, @floatFromInt(render_texture.texture.height));
+        if (it_render.getOrNull(components.render.WidthHeightView)) |wh| {
+            w = wh.w.*;
+            h = wh.h.*;
+        }
+
+        var alpha: f32 = 1.0;
+        if (it_render.getAutoOrNull(components.render.Alpha)) |v| {
+            alpha = v.alpha.*;
+        }
 
         try list.append(renderables_list.gpa, renderables.Renderable{
             .x = interpolatedPositionX(pos, time.alpha) - h / 2.0,
             .y = interpolatedPositionY(pos, time.alpha) - w / 2.0,
             .w = w,
             .h = h,
+            .alpha = alpha,
             .flip_h = true,
             .texture = render_texture.texture,
-            .z_index = 0,
+            .z_index = z_index,
         });
     }
 }
@@ -194,14 +312,22 @@ pub fn renderRenderablesSystem(app: *core.App) !void {
         }
     }.lessThan);
     for (list.items) |r| {
-        const flip: f32 = if (r.flip_h) -1 else 1;
+        const flip: c_int = if (r.flip_h) -1 else 1;
         const src = rl.Rectangle{
             .x = 0,
             .y = 0,
-            .width = r.w,
-            .height = r.h * flip,
+            .width = @floatFromInt(r.texture.width),
+            .height = @floatFromInt(r.texture.height * flip),
         };
-        rl.DrawTextureRec(r.texture, src, .{ .x = r.x, .y = r.y }, rl.WHITE);
+        const dst = rl.Rectangle{
+            .x = r.x,
+            .y = r.y,
+            .width = r.w,
+            .height = r.h,
+        };
+        const tint = rl.Color{.r = 255, .g = 255, .b = 255, .a = @intFromFloat(255.0 * r.alpha)};
+        rl.DrawTexturePro(r.texture, src, dst, .{ .x = 0, .y = 0}, 0, tint);
+        // rl.DrawTextureRec(r.texture, src, .{ .x = r.x, .y = r.y }, rl.WHITE);
     }
 }
 
@@ -220,11 +346,11 @@ pub fn clearRenderablesSystem(app: *core.App) !void {
     renderables_list.list.clearRetainingCapacity();
 }
 
-const camera3d = rl.Camera3D{
-    .position = .{ .x = 3.0, .y = 3.0, .z = 3.0 },
-    .target = .{ .x = 0.0, .y = 1.0, .z = 0.0 },
+const DEFAULT_RENDER_CAMERA = rl.Camera3D{
+    .position = .{ .x = 6.0, .y = 7.0, .z = 6.0 },
+    .target = .{ .x = 0.0, .y = 2.0, .z = 0.0 },
     .up = .{ .x = 0.0, .y = 1.0, .z = 0.0 },
-    .fovy = 3.0,
+    .fovy = 4,
     .projection = rl.CAMERA_ORTHOGRAPHIC,
 };
 
