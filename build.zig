@@ -5,17 +5,19 @@ pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
 
-    const homebrew_raylib_prefix = detectHomebrewRaylib(b);
+    const detected_raylib = detectSystemRaylib(b);
     const use_system_raylib = b.option(
         bool,
         "system-raylib",
         "Use system-installed raylib instead of bundled static lib (auto-detected if not set)",
-    ) orelse (homebrew_raylib_prefix != null or detectSystemRaylib(b));
+    ) orelse (detected_raylib != null);
 
-    const raylib_include_dir = if (homebrew_raylib_prefix) |prefix|
-        b.pathJoin(&.{ prefix, "include" })
-    else
-        null;
+    const raylib_include_dir = if (use_system_raylib) blk: {
+        if (detected_raylib) |raylib| {
+            if (raylib.include_dir) |include_dir| break :blk include_dir;
+        }
+        break :blk null;
+    } else null;
     const raylib_header = if (raylib_include_dir) |include_dir|
         std.Build.LazyPath{ .cwd_relative = b.pathJoin(&.{ include_dir, "raylib.h" }) }
     else
@@ -54,8 +56,8 @@ pub fn build(b: *std.Build) void {
     engine_mod.addImport("raymath_c", raymath_translate.createModule());
     if (!use_system_raylib) {
         engine_mod.addIncludePath(b.path("third_party/raylib/include/"));
-    } else if (homebrew_raylib_prefix) |prefix| {
-        engine_mod.addSystemIncludePath(.{ .cwd_relative = b.pathJoin(&.{ prefix, "include" }) });
+    } else if (raylib_include_dir) |include_dir| {
+        engine_mod.addSystemIncludePath(.{ .cwd_relative = include_dir });
     }
 
     const exe_mod = b.createModule(.{
@@ -80,12 +82,7 @@ pub fn build(b: *std.Build) void {
     });
 
     if (use_system_raylib) {
-        if (homebrew_raylib_prefix) |prefix| {
-            exe.root_module.addLibraryPath(.{ .cwd_relative = b.pathJoin(&.{ prefix, "lib" }) });
-            exe.root_module.linkSystemLibrary("raylib", .{ .use_pkg_config = .no });
-        } else {
-            exe.root_module.linkSystemLibrary("raylib", .{});
-        }
+        linkSystemRaylib(exe.root_module, detected_raylib);
     } else {
         exe.root_module.addIncludePath(b.path("third_party/raylib/include/"));
         exe.root_module.addObjectFile(b.path("third_party/raylib/lib/libraylib.a"));
@@ -101,39 +98,67 @@ pub fn build(b: *std.Build) void {
     run_step.dependOn(&run_cmd.step);
 
     const examples_step = b.step("examples", "Build all examples");
-    addExample(b, engine_mod, target, optimize, use_system_raylib, "blob", "src/examples/blob/main.zig", examples_step);
-    addExample(b, engine_mod, target, optimize, use_system_raylib, "ecs-stress", "src/examples/ecs_stress/main.zig", examples_step);
-    addExample(b, engine_mod, target, optimize, use_system_raylib, "path-finding", "src/examples/path_finding/main.zig", examples_step);
+    addExample(b, engine_mod, target, optimize, use_system_raylib, detected_raylib, "blob", "src/examples/blob/main.zig", examples_step);
+    addExample(b, engine_mod, target, optimize, use_system_raylib, detected_raylib, "ecs-stress", "src/examples/ecs_stress/main.zig", examples_step);
+    addExample(b, engine_mod, target, optimize, use_system_raylib, detected_raylib, "path-finding", "src/examples/path_finding/main.zig", examples_step);
 }
 
-fn detectSystemRaylib(b: *std.Build) bool {
-    const result = std.process.run(b.allocator, b.graph.io, .{
-        .argv = &.{ "pkg-config", "--exists", "raylib" },
-    }) catch return false;
-    defer b.allocator.free(result.stdout);
-    defer b.allocator.free(result.stderr);
-    switch (result.term) {
-        // Child.Term's fields are lowercase as of 0.16 (.Exited -> .exited).
-        .exited => |code| return code == 0,
-        else => return false,
+const SystemRaylib = struct {
+    include_dir: ?[]const u8,
+    library_dir: ?[]const u8,
+    use_pkg_config: bool,
+};
+
+fn detectSystemRaylib(b: *std.Build) ?SystemRaylib {
+    if (runCommand(b, &.{ "brew", "--prefix", "raylib" })) |prefix| {
+        const trimmed_prefix = std.mem.trim(u8, prefix, " \r\n\t");
+        if (trimmed_prefix.len != 0) {
+            return .{
+                .include_dir = b.pathJoin(&.{ trimmed_prefix, "include" }),
+                .library_dir = b.pathJoin(&.{ trimmed_prefix, "lib" }),
+                .use_pkg_config = false,
+            };
+        }
     }
+
+    if (runCommand(b, &.{ "pkg-config", "--exists", "raylib" }) == null) return null;
+    const include_dir = runCommand(b, &.{ "pkg-config", "--variable=includedir", "raylib" });
+    const library_dir = runCommand(b, &.{ "pkg-config", "--variable=libdir", "raylib" });
+    return .{
+        .include_dir = if (include_dir) |dir| std.mem.trim(u8, dir, " \r\n\t") else null,
+        .library_dir = if (library_dir) |dir| std.mem.trim(u8, dir, " \r\n\t") else null,
+        .use_pkg_config = true,
+    };
 }
 
-fn detectHomebrewRaylib(b: *std.Build) ?[]const u8 {
+fn runCommand(b: *std.Build, argv: []const []const u8) ?[]const u8 {
     const result = std.process.run(b.allocator, b.graph.io, .{
-        .argv = &.{ "brew", "--prefix", "raylib" },
+        .argv = argv,
     }) catch return null;
     defer b.allocator.free(result.stdout);
     defer b.allocator.free(result.stderr);
-
     switch (result.term) {
-        .exited => |code| if (code == 0) {
-            const prefix = std.mem.trim(u8, result.stdout, " \r\n\t");
-            if (prefix.len != 0) return b.allocator.dupe(u8, prefix) catch @panic("OOM");
+        .exited => |code| {
+            if (code != 0) return null;
+            return b.allocator.dupe(u8, result.stdout) catch @panic("OOM");
         },
-        else => {},
+        else => return null,
     }
-    return null;
+}
+
+fn linkSystemRaylib(module: *std.Build.Module, raylib: ?SystemRaylib) void {
+    if (raylib) |installation| {
+        if (installation.library_dir) |library_dir| {
+            if (!installation.use_pkg_config) {
+                module.addLibraryPath(.{ .cwd_relative = library_dir });
+            }
+        }
+        module.linkSystemLibrary("raylib", .{
+            .use_pkg_config = if (installation.use_pkg_config) .yes else .no,
+        });
+    } else {
+        module.linkSystemLibrary("raylib", .{});
+    }
 }
 
 fn addExample(
@@ -142,6 +167,7 @@ fn addExample(
     target: std.Build.ResolvedTarget,
     optimize: std.builtin.OptimizeMode,
     use_system_raylib: bool,
+    detected_raylib: ?SystemRaylib,
     name: []const u8,
     root_path: []const u8,
     examples_step: *std.Build.Step,
@@ -160,7 +186,7 @@ fn addExample(
     });
 
     if (use_system_raylib) {
-        exe.root_module.linkSystemLibrary("raylib", .{});
+        linkSystemRaylib(exe.root_module, detected_raylib);
     } else {
         exe.root_module.addIncludePath(b.path("third_party/raylib/include/"));
         exe.root_module.addObjectFile(b.path("third_party/raylib/lib/libraylib.a"));
