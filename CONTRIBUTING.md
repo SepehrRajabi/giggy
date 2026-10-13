@@ -4,7 +4,7 @@ Thanks for your interest in helping! This project is a handcrafted ECS + game in
 
 ## Quick start
 
-1) Install Zig (recent stable version - currently `0.16.0`).
+1) Install Zig (recent stable version - currently `0.17.0`).
 2) Install raylib, or build it locally as described in `README.md`.
 3) Build and run:
 
@@ -30,9 +30,7 @@ zig build examples
 
 ## Tests
 
-- Run engine tests: `zig test src/engine/$MODULE`
-- If raylib headers are not in a standard include path, add includes, e.g.:
-  - `zig test --dep engine -Mengine=src/engine/root.zig -I third_party/raylib/include -isystem /usr/include/`
+Run engine tests with: `zig build test-engine --summary all`
 
 ## Submitting changes
 
